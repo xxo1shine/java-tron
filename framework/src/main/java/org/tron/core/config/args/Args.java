@@ -588,6 +588,7 @@ public class Args extends CommonParameter {
     PARAMETER.nodeEnableIpv6 = nc.isEnableIpv6();
 
     PARAMETER.syncFetchBatchNum = nc.getSyncFetchBatchNum();
+    PARAMETER.maxHeadBlockTimeDeviation = nc.getMaxHeadBlockTimeDeviation();
     PARAMETER.maxPendingBlockSize = nc.getMaxPendingBlockSize();
     PARAMETER.solidityThreads = nc.getSolidityThreads();
     PARAMETER.blockProducedTimeOut = nc.getBlockProducedTimeOut();
@@ -1315,4 +1316,3 @@ public class Args extends CommonParameter {
     return optionGroupMap;
   }
 }
-

@@ -1,5 +1,6 @@
 package org.tron.core.config.args;
 
+import static org.tron.core.config.Parameter.ChainConstant.BLOCK_PRODUCED_INTERVAL;
 import static org.tron.core.config.Parameter.ChainConstant.MAX_ACTIVE_WITNESS_NUM;
 import static org.tron.core.exception.TronError.ErrCode.PARAMETER_INIT;
 
@@ -28,6 +29,7 @@ public class NodeConfig {
   private String trustNode = "";
   private boolean walletExtensionApi = false;
   private int syncFetchBatchNum = 2000;
+  private int maxHeadBlockTimeDeviation = 30;
   private int maxPendingBlockSize = 500;
   private int validateSignThreadNum = 0; // 0 = auto (availableProcessors)
   private int maxConnections = 30; // legacy key maxActiveNodes
@@ -356,6 +358,14 @@ public class NodeConfig {
    * Runs after ConfigBeanFactory binding and manual field reads.
    */
   private void postProcess() {
+    int minHeadBlockTimeDeviation = (int) (BLOCK_PRODUCED_INTERVAL / 1000);
+    if (maxHeadBlockTimeDeviation < minHeadBlockTimeDeviation) {
+      logger.warn("maxHeadBlockTimeDeviation {} is below the minimum block interval {}s,"
+              + " clamped to {}s", maxHeadBlockTimeDeviation, minHeadBlockTimeDeviation,
+          minHeadBlockTimeDeviation);
+      maxHeadBlockTimeDeviation = minHeadBlockTimeDeviation;
+    }
+
     // rpcThreadNum: 0 = auto-detect
     if (rpc.thread == 0) {
       rpc.thread = (Runtime.getRuntime().availableProcessors() + 1) / 2;
