@@ -20,7 +20,9 @@ import org.tron.common.BaseTest;
 import org.tron.common.TestConstants;
 import org.tron.common.runtime.TvmTestUtils;
 import org.tron.common.utils.ByteArray;
+import org.tron.common.utils.ReflectUtils;
 import org.tron.core.config.args.Args;
+import org.tron.core.exception.P2pException;
 import org.tron.core.net.TronNetDelegate;
 import org.tron.core.net.message.adv.TransactionMessage;
 import org.tron.core.net.message.adv.TransactionsMessage;
@@ -129,6 +131,52 @@ public class TransactionsMsgHandlerTest extends BaseTest {
       Assert.fail();
     } finally {
       transactionsMsgHandler.close();
+    }
+  }
+
+  @Test
+  public void testDuplicateTransactionRejected() throws Exception {
+    TransactionsMsgHandler handler = new TransactionsMsgHandler();
+    handler.init();
+    try {
+      PeerConnection peer = Mockito.mock(PeerConnection.class);
+
+      // Build a transaction
+      BalanceContract.TransferContract transferContract = BalanceContract.TransferContract
+          .newBuilder()
+          .setAmount(10)
+          .setOwnerAddress(ByteString.copyFrom(ByteArray.fromHexString("121212a9cf")))
+          .setToAddress(ByteString.copyFrom(ByteArray.fromHexString("232323a9cf")))
+          .build();
+      Protocol.Transaction trx = Protocol.Transaction.newBuilder()
+          .setRawData(Protocol.Transaction.raw.newBuilder()
+              .addContract(Protocol.Transaction.Contract.newBuilder()
+                  .setType(Protocol.Transaction.Contract.ContractType.TransferContract)
+                  .setParameter(Any.pack(transferContract)).build())
+              .build())
+          .build();
+
+      // Same trx twice → duplicate
+      Protocol.Transactions transactions = Protocol.Transactions.newBuilder()
+          .addTransactions(trx)
+          .addTransactions(trx)
+          .build();
+      TransactionsMessage msg = new TransactionsMessage(transactions.getTransactionsList());
+
+      TransactionMessage trxMsg = new TransactionMessage(trx);
+      Item item = new Item(trxMsg.getMessageId(), Protocol.Inventory.InventoryType.TRX);
+      Map<Item, Long> advInvRequest = new ConcurrentHashMap<>();
+      advInvRequest.put(item, System.currentTimeMillis());
+      Mockito.when(peer.getAdvInvRequest()).thenReturn(advInvRequest);
+
+      try {
+        handler.processMessage(peer, msg);
+        Assert.fail("Expected P2pException for duplicate transaction");
+      } catch (P2pException e) {
+        Assert.assertEquals(P2pException.TypeEnum.BAD_MESSAGE, e.getType());
+      }
+    } finally {
+      handler.close();
     }
   }
 
