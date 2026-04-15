@@ -128,6 +128,8 @@ final class ConfigKey {
   public static final String NODE_RPC_MIN_EFFECTIVE_CONNECTION =
       "node.rpc.minEffectiveConnection";
   public static final String NODE_RPC_TRX_CACHE_ENABLE = "node.rpc.trxCacheEnable";
+  public static final String NODE_MAX_HEAD_BLOCK_TIME_DEVIATION =
+      "node.maxHeadBlockTimeDeviation";
 
   // node - http
   public static final String NODE_HTTP_FULLNODE_PORT = "node.http.fullNodePort";

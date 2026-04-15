@@ -10,6 +10,7 @@ import static org.tron.core.Constant.DYNAMIC_ENERGY_MAX_FACTOR_RANGE;
 import static org.tron.core.Constant.ENERGY_LIMIT_IN_CONSTANT_TX;
 import static org.tron.core.Constant.MAX_PROPOSAL_EXPIRE_TIME;
 import static org.tron.core.Constant.MIN_PROPOSAL_EXPIRE_TIME;
+import static org.tron.core.config.Parameter.ChainConstant.BLOCK_PRODUCED_INTERVAL;
 import static org.tron.core.config.Parameter.ChainConstant.BLOCK_PRODUCE_TIMEOUT_PERCENT;
 import static org.tron.core.config.Parameter.ChainConstant.MAX_ACTIVE_WITNESS_NUM;
 import static org.tron.core.exception.TronError.ErrCode.PARAMETER_INIT;
@@ -648,6 +649,16 @@ public class Args extends CommonParameter {
 
     PARAMETER.minEffectiveConnection = config.hasPath(ConfigKey.NODE_RPC_MIN_EFFECTIVE_CONNECTION)
         ? config.getInt(ConfigKey.NODE_RPC_MIN_EFFECTIVE_CONNECTION) : 1;
+
+    PARAMETER.maxHeadBlockTimeDeviation = config.hasPath(
+        ConfigKey.NODE_MAX_HEAD_BLOCK_TIME_DEVIATION)
+        ? config.getInt(ConfigKey.NODE_MAX_HEAD_BLOCK_TIME_DEVIATION) : 30;
+    int minDeviation = (int) (BLOCK_PRODUCED_INTERVAL / 1000);
+    if (PARAMETER.maxHeadBlockTimeDeviation < minDeviation) {
+      logger.warn("maxHeadBlockTimeDeviation {} is below the minimum block interval {}s,"
+          + " clamped to {}s", PARAMETER.maxHeadBlockTimeDeviation, minDeviation, minDeviation);
+      PARAMETER.maxHeadBlockTimeDeviation = minDeviation;
+    }
 
     PARAMETER.trxCacheEnable = config.hasPath(ConfigKey.NODE_RPC_TRX_CACHE_ENABLE)
         && config.getBoolean(ConfigKey.NODE_RPC_TRX_CACHE_ENABLE);
