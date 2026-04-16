@@ -84,6 +84,7 @@ final class ConfigKey {
   public static final String NODE_PRODUCED_TIMEOUT = "node.blockProducedTimeOut";
   public static final String NODE_MAX_TRANSACTION_PENDING_SIZE = "node.maxTransactionPendingSize";
   public static final String NODE_PENDING_TRANSACTION_TIMEOUT = "node.pendingTransactionTimeout";
+  public static final String NODE_MAX_TRX_CACHE_SIZE = "node.maxTrxCacheSize";
   public static final String NODE_ACTIVE = "node.active";
   public static final String NODE_PASSIVE = "node.passive";
   public static final String NODE_FAST_FORWARD = "node.fastForward";

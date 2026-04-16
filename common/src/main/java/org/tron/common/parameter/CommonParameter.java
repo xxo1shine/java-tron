@@ -468,6 +468,9 @@ public class CommonParameter {
   public long pendingTransactionTimeout;
   @Getter
   @Setter
+  public int maxTrxCacheSize; // clearParam: 50000
+  @Getter
+  @Setter
   public boolean nodeMetricsEnable = false;
   @Getter
   @Setter

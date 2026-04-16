@@ -634,6 +634,9 @@ public class Args extends CommonParameter {
     PARAMETER.pendingTransactionTimeout = config.hasPath(ConfigKey.NODE_PENDING_TRANSACTION_TIMEOUT)
         ? config.getLong(ConfigKey.NODE_PENDING_TRANSACTION_TIMEOUT) : 60_000;
 
+    PARAMETER.maxTrxCacheSize = config.hasPath(ConfigKey.NODE_MAX_TRX_CACHE_SIZE)
+        ? config.getInt(ConfigKey.NODE_MAX_TRX_CACHE_SIZE) : 50_000;
+
     PARAMETER.needToUpdateAsset =
         !config.hasPath(ConfigKey.STORAGE_NEEDTO_UPDATE_ASSET) || config
             .getBoolean(ConfigKey.STORAGE_NEEDTO_UPDATE_ASSET);
