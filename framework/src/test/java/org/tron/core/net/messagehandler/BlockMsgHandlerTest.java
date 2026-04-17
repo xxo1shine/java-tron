@@ -132,12 +132,12 @@ public class BlockMsgHandlerTest extends BaseTest {
   }
 
   @Test
-  public void testProcessBlock() {
+  public void testProcessBlock() throws Exception {
     TronNetDelegate tronNetDelegate = Mockito.mock(TronNetDelegate.class);
-
+    Field field = handler.getClass().getDeclaredField("tronNetDelegate");
+    field.setAccessible(true);
+    Object origin = field.get(handler);
     try {
-      Field field = handler.getClass().getDeclaredField("tronNetDelegate");
-      field.setAccessible(true);
       field.set(handler, tronNetDelegate);
 
       BlockCapsule blockCapsule0 = new BlockCapsule(1,
@@ -164,8 +164,74 @@ public class BlockMsgHandlerTest extends BaseTest {
           .getDeclaredMethod("processBlock", PeerConnection.class, BlockCapsule.class);
       method.setAccessible(true);
       method.invoke(handler, peer, blockCapsule0);
-    } catch (Exception e) {
-      Assert.fail();
+    } finally {
+      field.set(handler, origin);
+    }
+  }
+
+  @Test
+  public void testBlockRcvTimeSetAfterProcessBlockSuccess() throws Exception {
+    TronNetDelegate tronNetDelegate = Mockito.mock(TronNetDelegate.class);
+    Field field = handler.getClass().getDeclaredField("tronNetDelegate");
+    field.setAccessible(true);
+    Object origin = field.get(handler);
+    try {
+      field.set(handler, tronNetDelegate);
+
+      BlockCapsule blockCapsule = new BlockCapsule(1,
+          Sha256Hash.wrap(ByteString.copyFrom(ByteArray.fromHexString(
+              "9938a342238077182498b464ac0292229938a342238077182498b464ac029222"))),
+          1234, ByteString.copyFrom("1234567".getBytes()));
+
+      Mockito.doReturn(true).when(tronNetDelegate).validBlock(any(BlockCapsule.class));
+      Mockito.doReturn(true).when(tronNetDelegate).containBlock(any(BlockId.class));
+      Mockito.doReturn(blockCapsule.getBlockId()).when(tronNetDelegate).getHeadBlockId();
+      Mockito.doNothing().when(tronNetDelegate).processBlock(any(BlockCapsule.class), anyBoolean());
+      Mockito.doReturn(new ArrayList<PeerConnection>()).when(tronNetDelegate).getActivePeer();
+
+      peer.setBlockRcvTime(0L);
+      Method method = handler.getClass()
+          .getDeclaredMethod("processBlock", PeerConnection.class, BlockCapsule.class);
+      method.setAccessible(true);
+
+      long before = System.currentTimeMillis();
+      method.invoke(handler, peer, blockCapsule);
+      long after = System.currentTimeMillis();
+
+      Assert.assertTrue("blockRcvTime should be set after successful processBlock",
+          peer.getBlockRcvTime() >= before && peer.getBlockRcvTime() <= after);
+    } finally {
+      field.set(handler, origin);
+    }
+  }
+
+  @Test
+  public void testBlockRcvTimeNotSetWhenValidationFails() throws Exception {
+    TronNetDelegate tronNetDelegate = Mockito.mock(TronNetDelegate.class);
+    Field field = handler.getClass().getDeclaredField("tronNetDelegate");
+    field.setAccessible(true);
+    Object origin = field.get(handler);
+    try {
+      field.set(handler, tronNetDelegate);
+
+      BlockCapsule blockCapsule = new BlockCapsule(1,
+          Sha256Hash.wrap(ByteString.copyFrom(ByteArray.fromHexString(
+              "9938a342238077182498b464ac0292229938a342238077182498b464ac029222"))),
+          1234, ByteString.copyFrom("1234567".getBytes()));
+
+      // validBlock returns false → processBlock short-circuits before setBlockRcvTime
+      Mockito.doReturn(false).when(tronNetDelegate).validBlock(any(BlockCapsule.class));
+
+      peer.setBlockRcvTime(0L);
+      Method method = handler.getClass()
+          .getDeclaredMethod("processBlock", PeerConnection.class, BlockCapsule.class);
+      method.setAccessible(true);
+      method.invoke(handler, peer, blockCapsule);
+
+      Assert.assertEquals("blockRcvTime must stay 0 when block fails validation",
+          0L, peer.getBlockRcvTime());
+    } finally {
+      field.set(handler, origin);
     }
   }
 }

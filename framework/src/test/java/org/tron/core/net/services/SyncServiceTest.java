@@ -1,5 +1,7 @@
 package org.tron.core.net.services;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.cache.Cache;
@@ -18,7 +20,9 @@ import org.tron.common.utils.ReflectUtils;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.core.capsule.BlockCapsule;
 import org.tron.core.net.P2pEventHandlerImpl;
+import org.tron.core.net.TronNetDelegate;
 import org.tron.core.net.message.adv.BlockMessage;
+import org.tron.core.net.messagehandler.PbftDataSyncHandler;
 import org.tron.core.net.peer.PeerConnection;
 import org.tron.core.net.peer.PeerManager;
 import org.tron.core.net.peer.TronState;
@@ -169,6 +173,83 @@ public class SyncServiceTest extends BaseMethodTest {
     peer.getSyncBlockRequested().remove(blockId);
     method.invoke(service);
     Assert.assertTrue(peer.getSyncBlockRequested().get(blockId) == null);
+  }
+
+  @Test
+  public void testProcessSyncBlockSetsBlockRcvTime() throws Exception {
+    TronNetDelegate mockDelegate = mock(TronNetDelegate.class);
+    PbftDataSyncHandler mockPbft = mock(PbftDataSyncHandler.class);
+    Mockito.doNothing().when(mockDelegate).validSignature(any(BlockCapsule.class));
+    Mockito.doNothing().when(mockDelegate).processBlock(any(BlockCapsule.class), anyBoolean());
+    Mockito.doReturn(new ArrayList<PeerConnection>()).when(mockDelegate).getActivePeer();
+    Mockito.doNothing().when(mockPbft).processPBFTCommitData(any(BlockCapsule.class));
+
+    Object originDelegate = ReflectUtils.getFieldObject(service, "tronNetDelegate");
+    Object originPbft = ReflectUtils.getFieldObject(service, "pbftDataSyncHandler");
+    try {
+      ReflectUtils.setFieldValue(service, "tronNetDelegate", mockDelegate);
+      ReflectUtils.setFieldValue(service, "pbftDataSyncHandler", mockPbft);
+
+      peer = context.getBean(PeerConnection.class);
+      Channel c1 = new Channel();
+      ReflectUtils.setFieldValue(c1, "inetSocketAddress", inetSocketAddress);
+      ReflectUtils.setFieldValue(c1, "inetAddress", inetSocketAddress.getAddress());
+      peer.setChannel(c1);
+      peer.setBlockRcvTime(0L);
+
+      BlockCapsule blockCapsule = new BlockCapsule(Protocol.Block.newBuilder().build());
+
+      Method method = service.getClass()
+          .getDeclaredMethod("processSyncBlock", BlockCapsule.class, PeerConnection.class);
+      method.setAccessible(true);
+
+      long before = System.currentTimeMillis();
+      method.invoke(service, blockCapsule, peer);
+      long after = System.currentTimeMillis();
+
+      Assert.assertTrue("blockRcvTime should be set after successful processSyncBlock",
+          peer.getBlockRcvTime() >= before && peer.getBlockRcvTime() <= after);
+    } finally {
+      ReflectUtils.setFieldValue(service, "tronNetDelegate", originDelegate);
+      ReflectUtils.setFieldValue(service, "pbftDataSyncHandler", originPbft);
+    }
+  }
+
+  @Test
+  public void testProcessSyncBlockDoesNotSetBlockRcvTimeOnFailure() throws Exception {
+    TronNetDelegate mockDelegate = mock(TronNetDelegate.class);
+    PbftDataSyncHandler mockPbft = mock(PbftDataSyncHandler.class);
+    Mockito.doNothing().when(mockDelegate).validSignature(any(BlockCapsule.class));
+    Mockito.doThrow(new RuntimeException("process failed"))
+        .when(mockDelegate).processBlock(any(BlockCapsule.class), anyBoolean());
+    Mockito.doReturn(new ArrayList<PeerConnection>()).when(mockDelegate).getActivePeer();
+
+    Object originDelegate = ReflectUtils.getFieldObject(service, "tronNetDelegate");
+    Object originPbft = ReflectUtils.getFieldObject(service, "pbftDataSyncHandler");
+    try {
+      ReflectUtils.setFieldValue(service, "tronNetDelegate", mockDelegate);
+      ReflectUtils.setFieldValue(service, "pbftDataSyncHandler", mockPbft);
+
+      peer = context.getBean(PeerConnection.class);
+      Channel c1 = new Channel();
+      ReflectUtils.setFieldValue(c1, "inetSocketAddress", inetSocketAddress);
+      ReflectUtils.setFieldValue(c1, "inetAddress", inetSocketAddress.getAddress());
+      peer.setChannel(c1);
+      peer.setBlockRcvTime(0L);
+
+      BlockCapsule blockCapsule = new BlockCapsule(Protocol.Block.newBuilder().build());
+
+      Method method = service.getClass()
+          .getDeclaredMethod("processSyncBlock", BlockCapsule.class, PeerConnection.class);
+      method.setAccessible(true);
+      method.invoke(service, blockCapsule, peer);
+
+      Assert.assertEquals("blockRcvTime must stay 0 when processBlock throws",
+          0L, peer.getBlockRcvTime());
+    } finally {
+      ReflectUtils.setFieldValue(service, "tronNetDelegate", originDelegate);
+      ReflectUtils.setFieldValue(service, "pbftDataSyncHandler", originPbft);
+    }
   }
 
   @Test

@@ -44,7 +44,7 @@ public class ResilienceService {
 
   @Autowired
   private ChainBaseManager chainBaseManager;
-
+ 
   public void init() {
     if (Args.getInstance().isOpenFullTcpDisconnect) {
       executor.scheduleWithFixedDelay(() -> {
@@ -86,6 +86,7 @@ public class ResilienceService {
         .collect(Collectors.toList());
 
     if (peers.size() >= minBroadcastPeerSize) {
+      peers = getRandomDisconnectionPeers(peers);
       long now = System.currentTimeMillis();
       Map<Object, Integer> weights = new HashMap<>();
       peers.forEach(peer -> {
@@ -120,6 +121,12 @@ public class ResilienceService {
     }
   }
 
+
+  private List<PeerConnection> getRandomDisconnectionPeers(List<PeerConnection> peers) {
+    peers.forEach(p -> p.setBlockRcvTimeCmp(p.getBlockRcvTime()));
+    peers.sort(Comparator.comparingLong(PeerConnection::getBlockRcvTimeCmp));
+    return peers.subList(0, peers.size() / 2);
+  }
 
   private void disconnectLan() {
     if (!isLanNode()) {
