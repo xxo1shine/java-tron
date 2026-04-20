@@ -188,6 +188,7 @@ public class NodeConfig {
   public static class P2pConfig {
 
     private int version = 11111;
+    private int helloMsgTimestampThreshold = 1800;
   }
 
   @Getter
@@ -356,6 +357,8 @@ public class NodeConfig {
    * Runs after ConfigBeanFactory binding and manual field reads.
    */
   private void postProcess() {
+    p2p.helloMsgTimestampThreshold = Math.max(1, p2p.helloMsgTimestampThreshold);
+
     // rpcThreadNum: 0 = auto-detect
     if (rpc.thread == 0) {
       rpc.thread = (Runtime.getRuntime().availableProcessors() + 1) / 2;
