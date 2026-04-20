@@ -73,6 +73,8 @@ final class ConfigKey {
   // node - p2p
   public static final String NODE_LISTEN_PORT = "node.listen.port";
   public static final String NODE_P2P_VERSION = "node.p2p.version";
+  public static final String NODE_HELLO_MSG_TIMESTAMP_THRESHOLD =
+      "node.p2p.helloMsgTimestampThreshold";
   public static final String NODE_ENABLE_IPV6 = "node.enableIpv6";
   public static final String NODE_SYNC_FETCH_BATCH_NUM = "node.syncFetchBatchNum";
   public static final String NODE_MAX_TPS = "node.maxTps";

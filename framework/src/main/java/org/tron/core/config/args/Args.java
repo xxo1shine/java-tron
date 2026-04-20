@@ -627,6 +627,13 @@ public class Args extends CommonParameter {
       PARAMETER.inactiveThreshold = 1;
     }
 
+    PARAMETER.helloMsgTimestampThreshold =
+        config.hasPath(ConfigKey.NODE_HELLO_MSG_TIMESTAMP_THRESHOLD)
+            ? config.getInt(ConfigKey.NODE_HELLO_MSG_TIMESTAMP_THRESHOLD) : 1800;
+    if (PARAMETER.helloMsgTimestampThreshold < 1) {
+      PARAMETER.helloMsgTimestampThreshold = 1;
+    }
+
     PARAMETER.maxTransactionPendingSize =
         config.hasPath(ConfigKey.NODE_MAX_TRANSACTION_PENDING_SIZE)
             ? config.getInt(ConfigKey.NODE_MAX_TRANSACTION_PENDING_SIZE) : 2000;

@@ -301,6 +301,9 @@ public class CommonParameter {
   public int inactiveThreshold = 600; // from clearParam(), consistent with mainnet.conf
   @Getter
   @Setter
+  public int helloMsgTimestampThreshold = 1800;
+  @Getter
+  @Setter
   public boolean nodeDetectEnable;
   @Getter
   @Setter
