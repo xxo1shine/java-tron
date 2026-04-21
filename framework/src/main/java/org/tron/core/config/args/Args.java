@@ -435,6 +435,15 @@ public class Args extends CommonParameter {
       PARAMETER.syncFetchBatchNum = 100;
     }
 
+    PARAMETER.maxPendingBlockNum = config.hasPath(ConfigKey.NODE_MAX_PENDING_BLOCK_NUM)
+        ? config.getInt(ConfigKey.NODE_MAX_PENDING_BLOCK_NUM) : 500;
+    if (PARAMETER.maxPendingBlockNum > 2000) {
+      PARAMETER.maxPendingBlockNum = 2000;
+    }
+    if (PARAMETER.maxPendingBlockNum < 50) {
+      PARAMETER.maxPendingBlockNum = 50;
+    }
+
     PARAMETER.rpcPort =
         config.hasPath(ConfigKey.NODE_RPC_PORT)
             ? config.getInt(ConfigKey.NODE_RPC_PORT) : 50051;

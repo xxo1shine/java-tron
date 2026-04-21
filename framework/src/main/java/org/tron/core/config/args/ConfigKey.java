@@ -75,6 +75,7 @@ final class ConfigKey {
   public static final String NODE_P2P_VERSION = "node.p2p.version";
   public static final String NODE_ENABLE_IPV6 = "node.enableIpv6";
   public static final String NODE_SYNC_FETCH_BATCH_NUM = "node.syncFetchBatchNum";
+  public static final String NODE_MAX_PENDING_BLOCK_NUM = "node.maxPendingBlockNum";
   public static final String NODE_MAX_TPS = "node.maxTps";
   public static final String NODE_NET_MAX_TRX_PER_SECOND = "node.netMaxTrxPerSecond";
   public static final String NODE_TCP_NETTY_WORK_THREAD_NUM = "node.tcpNettyWorkThreadNum";
