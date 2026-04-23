@@ -37,6 +37,8 @@ import org.tron.common.utils.Sha256Hash;
 import org.tron.common.utils.Time;
 import org.tron.core.capsule.utils.MerkleTree;
 import org.tron.core.config.Parameter.ChainConstant;
+import org.tron.core.exception.BadBlockException;
+import static org.tron.core.exception.BadBlockException.TypeEnum.CALC_MERKLE_ROOT_FAILED;
 import org.tron.core.exception.BadItemException;
 import org.tron.core.exception.ValidateSignatureException;
 import org.tron.core.store.AccountStore;
@@ -49,6 +51,7 @@ import org.tron.protos.Protocol.Transaction;
 public class BlockCapsule implements ProtoCapsule<Block> {
 
   public boolean generatedByMyself = false;
+  private volatile boolean merkleValidated = false;
   @Getter
   @Setter
   private TransactionRetCapsule result;
@@ -223,6 +226,19 @@ public class BlockCapsule implements ProtoCapsule<Block> {
         .collect(Collectors.toCollection(ArrayList::new));
 
     return MerkleTree.getInstance().createTree(ids).getRoot().getHash();
+  }
+
+  public void validateMerkleRoot() throws BadBlockException {
+    if (merkleValidated) {
+      return;
+    }
+    Sha256Hash actual = calcMerkleRoot();
+    if (!actual.equals(getMerkleRoot())) {
+      throw new BadBlockException(CALC_MERKLE_ROOT_FAILED,
+          String.format("merkle root mismatch for block %d: expected %s, actual %s",
+              getNum(), getMerkleRoot(), actual));
+    }
+    merkleValidated = true;
   }
 
   public void setMerkleRoot() {
