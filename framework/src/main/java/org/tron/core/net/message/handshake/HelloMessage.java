@@ -13,6 +13,7 @@ import org.tron.core.config.args.Args;
 import org.tron.core.net.message.MessageTypes;
 import org.tron.core.net.message.TronMessage;
 import org.tron.p2p.discover.Node;
+import org.tron.p2p.utils.ProtoUtil;
 import org.tron.program.Version;
 import org.tron.protos.Discover.Endpoint;
 import org.tron.protos.Protocol;
@@ -25,12 +26,12 @@ public class HelloMessage extends TronMessage {
 
   public HelloMessage(byte type, byte[] rawData) throws Exception {
     super(type, rawData);
-    this.helloMessage = Protocol.HelloMessage.parseFrom(rawData);
+    this.helloMessage = ProtoUtil.parseFrom(Protocol.HelloMessage.parser(), rawData);
   }
 
   public HelloMessage(byte[] data) throws Exception {
     super(MessageTypes.P2P_HELLO.asByte(), data);
-    this.helloMessage = Protocol.HelloMessage.parseFrom(data);
+    this.helloMessage = ProtoUtil.parseFrom(Protocol.HelloMessage.parser(), data);
   }
 
   public HelloMessage(Node from, long timestamp, ChainBaseManager chainBaseManager) {
