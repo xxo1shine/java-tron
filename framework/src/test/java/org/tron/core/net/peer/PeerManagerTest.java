@@ -3,10 +3,16 @@ package org.tron.core.net.peer;
 import static org.mockito.Mockito.mock;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -186,6 +192,66 @@ public class PeerManagerTest {
     PeerManager.sortPeers();
 
     Assert.assertEquals(PeerManager.getPeers().get(0), p2);
+  }
+
+  @Test(timeout = 5_000)
+  public void checkAndRemoveAreSerialized() throws Exception {
+    CountDownLatch checkReachedPeer = new CountDownLatch(1);
+    CountDownLatch continueCheck = new CountDownLatch(1);
+    CountDownLatch removeFinished = new CountDownLatch(1);
+    Channel channel = mock(Channel.class);
+    PeerConnection peer = mock(PeerConnection.class);
+    Mockito.when(peer.getChannel()).thenReturn(channel);
+    Mockito.when(channel.isActive()).thenReturn(true);
+    Mockito.when(channel.getDisconnectTime()).thenAnswer(invocation -> {
+      checkReachedPeer.countDown();
+      continueCheck.await();
+      return System.currentTimeMillis() - 120_000;
+    });
+
+    Field peersField = PeerManager.class.getDeclaredField("peers");
+    peersField.setAccessible(true);
+    peersField.set(null, Collections.synchronizedList(
+        new ArrayList<>(Collections.singletonList(peer))));
+    PeerManager.getActivePeersCount().set(1);
+    PeerManager.getPassivePeersCount().set(0);
+
+    Method check = PeerManager.class.getDeclaredMethod("check");
+    check.setAccessible(true);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<?> checkFuture = executor.submit(() -> {
+        try {
+          check.invoke(null);
+        } catch (ReflectiveOperationException e) {
+          throw new RuntimeException(e);
+        }
+      });
+      Assert.assertTrue(checkReachedPeer.await(1, TimeUnit.SECONDS));
+
+      Future<PeerConnection> removeFuture = executor.submit(() -> {
+        try {
+          return PeerManager.remove(channel);
+        } finally {
+          removeFinished.countDown();
+        }
+      });
+
+      boolean removedWhileCheckPaused = removeFinished.await(300, TimeUnit.MILLISECONDS);
+      continueCheck.countDown();
+      checkFuture.get(1, TimeUnit.SECONDS);
+
+      Assert.assertFalse(removedWhileCheckPaused);
+      Assert.assertNull(removeFuture.get(1, TimeUnit.SECONDS));
+      Assert.assertEquals(0, PeerManager.getActivePeersCount().get());
+    } finally {
+      continueCheck.countDown();
+      executor.shutdownNow();
+      Assert.assertTrue(executor.awaitTermination(1, TimeUnit.SECONDS));
+      peersField.set(null, Collections.synchronizedList(new ArrayList<>()));
+      PeerManager.getActivePeersCount().set(0);
+      PeerManager.getPassivePeersCount().set(0);
+    }
   }
 
 }
