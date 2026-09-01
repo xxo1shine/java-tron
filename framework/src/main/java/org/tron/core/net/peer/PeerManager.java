@@ -120,7 +120,7 @@ public class PeerManager {
     return peers;
   }
 
-  private static void check() {
+  private static synchronized void check() {
     long now = System.currentTimeMillis();
     for (PeerConnection peer : new ArrayList<>(peers)) {
       long disconnectTime = peer.getChannel().getDisconnectTime();
