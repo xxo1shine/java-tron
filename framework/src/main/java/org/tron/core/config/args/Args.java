@@ -563,6 +563,7 @@ public class Args extends CommonParameter {
 
     // ---- P2P sub-bean ----
     PARAMETER.nodeP2pVersion = nc.getP2p().getVersion();
+    PARAMETER.helloMsgTimestampThreshold = nc.getP2p().getHelloMsgTimestampThreshold();
 
     // ---- DNS sub-bean (tree URLs only — publish config uses complex validation) ----
     PARAMETER.dnsTreeUrls = nc.getDns().getTreeUrls().isEmpty()
@@ -1315,4 +1316,3 @@ public class Args extends CommonParameter {
     return optionGroupMap;
   }
 }
-

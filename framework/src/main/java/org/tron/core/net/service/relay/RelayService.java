@@ -1,5 +1,7 @@
 package org.tron.core.net.service.relay;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.protobuf.ByteString;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
@@ -73,6 +75,13 @@ public class RelayService {
           .copyFrom(Args.getLocalWitnesses().getWitnessAccountAddress()) : null;
 
   private int maxFastForwardNum = Args.getInstance().getMaxFastForwardNum();
+
+  private final long timestampThreshold =
+      Args.getInstance().getHelloMsgTimestampThreshold() * 1000L;
+
+  private final Cache<ByteString, Long> helloReplayCache = CacheBuilder.newBuilder()
+      .maximumSize(100)
+      .build();
 
   public void init() {
     manager = ctx.getBean(Manager.class);
@@ -156,6 +165,20 @@ public class RelayService {
       return false;
     }
 
+    long now = System.currentTimeMillis();
+    if (now - msg.getTimestamp() > timestampThreshold) {
+      logger.warn("HelloMessage from {}, timestamp {} is stale, threshold {} ms",
+          channel.getInetAddress(), msg.getTimestamp(), timestampThreshold);
+      return false;
+    }
+
+    Long lastTimestamp = helloReplayCache.getIfPresent(msg.getAddress());
+    if (lastTimestamp != null && msg.getTimestamp() <= lastTimestamp) {
+      logger.warn("HelloMessage from {}, timestamp {} is not greater than last {}",
+          channel.getInetAddress(), msg.getTimestamp(), lastTimestamp);
+      return false;
+    }
+
     boolean flag;
     try {
       Sha256Hash hash = Sha256Hash.of(CommonParameter
@@ -172,6 +195,7 @@ public class RelayService {
         flag = Arrays.equals(sigAddress, witnessPermissionAddress);
       }
       if (flag) {
+        helloReplayCache.put(msg.getAddress(), msg.getTimestamp());
         TronNetService.getP2pConfig().getTrustNodes().add(channel.getInetAddress());
         DesensitizedConverter.addSensitive(channel.getInetAddress().toString().substring(1),
             ByteArray.toHexString(msg.getAddress().toByteArray()));
