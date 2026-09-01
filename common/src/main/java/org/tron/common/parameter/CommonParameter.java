@@ -170,6 +170,10 @@ public class CommonParameter {
   @Setter
   public int maxPendingBlockSize;
 
+  @Getter
+  @Setter
+  public int maxHeadBlockTimeDeviation = 30;
+
   // If you are running a solidity node for java tron,
   // this flag is set to true
   @Getter
