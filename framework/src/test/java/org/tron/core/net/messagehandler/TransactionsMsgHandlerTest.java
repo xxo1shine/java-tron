@@ -5,6 +5,7 @@ import com.google.protobuf.ByteString;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -151,6 +152,37 @@ public class TransactionsMsgHandlerTest extends BaseTest {
 
     Mockito.verify(msg, Mockito.never()).getTransactions();
     Mockito.verifyNoInteractions(peer);
+  }
+
+  @Test
+  public void testResultClearedBeforeSmartContractQueued() throws Exception {
+    TransactionsMsgHandler handler = new TransactionsMsgHandler();
+    try {
+      PeerConnection peer = Mockito.mock(PeerConnection.class);
+      Protocol.Transaction trx = TvmTestUtils.generateTriggerSmartContractAndGetTransaction(
+              ByteArray.fromHexString("121212a9cf"),
+              ByteArray.fromHexString("121212a9cf"),
+              ByteArray.fromHexString("123456"),
+              100, 100000000, 0, 0)
+          .toBuilder()
+          .addRet(Protocol.Transaction.Result.newBuilder().setFee(123L).build())
+          .build();
+      TransactionsMessage msg = new TransactionsMessage(Collections.singletonList(trx));
+      stubAdvInvRequest(peer, msg);
+
+      handler.processMessage(peer, msg);
+
+      Field queueField = TransactionsMsgHandler.class.getDeclaredField("smartContractQueue");
+      queueField.setAccessible(true);
+      BlockingQueue<?> smartContractQueue = (BlockingQueue<?>) queueField.get(handler);
+      TransactionsMsgHandler.TrxEvent event =
+          (TransactionsMsgHandler.TrxEvent) smartContractQueue.poll();
+      Assert.assertNotNull(event);
+      Assert.assertEquals(0,
+          event.getMsg().getTransactionCapsule().getInstance().getRetCount());
+    } finally {
+      handler.close();
+    }
   }
 
   @Test

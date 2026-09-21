@@ -101,10 +101,12 @@ public class TransactionsMsgHandler implements TronMsgHandler {
         logger.info("TransactionsMsgHandler is closed during processing, stop submit");
         break;
       }
+      TransactionMessage trxMsg = new TransactionMessage(trx);
+      trxMsg.getTransactionCapsule().resetResult();
       int type = trx.getRawData().getContract(0).getType().getNumber();
       if (type == ContractType.TriggerSmartContract_VALUE
           || type == ContractType.CreateSmartContract_VALUE) {
-        if (!smartContractQueue.offer(new TrxEvent(peer, new TransactionMessage(trx)))) {
+        if (!smartContractQueue.offer(new TrxEvent(peer, trxMsg))) {
           smartContractQueueSize = smartContractQueue.size();
           trxHandlePoolQueueSize = queue.size();
           dropSmartContractCount++;
@@ -112,7 +114,7 @@ public class TransactionsMsgHandler implements TronMsgHandler {
       } else {
         try {
           ExecutorServiceManager.submit(
-              trxHandlePool, () -> handleTransaction(peer, new TransactionMessage(trx)));
+              trxHandlePool, () -> handleTransaction(peer, trxMsg));
         } catch (RejectedExecutionException e) {
           logger.warn("Submit task to {} failed", trxEsName);
           break;
