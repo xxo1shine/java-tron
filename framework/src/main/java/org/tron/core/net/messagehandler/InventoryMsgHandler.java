@@ -5,6 +5,7 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.core.capsule.BlockCapsule.BlockId;
 import org.tron.core.config.args.Args;
@@ -48,6 +49,12 @@ public class InventoryMsgHandler implements TronMsgHandler {
         long headNum = tronNetDelegate.getHeadBlockId().getNum();
         if (new BlockId(id).getNum() > headNum) {
           peer.setLastInteractiveTime(System.currentTimeMillis());
+          if (DiagnosticLog.shouldLog("pr6704.higher_block_inventory_refreshed_liveness")) {
+            logger.info("@@@ pr=6704 event=higher_block_inventory_refreshed_liveness"
+                + " head={} block={}",
+                headNum,
+                id);
+          }
         }
       }
     }
@@ -58,12 +65,22 @@ public class InventoryMsgHandler implements TronMsgHandler {
 
     List<Sha256Hash> hashList = inventoryMessage.getHashList();
     if (hashList.size() != new HashSet<>(hashList).size()) {
+      if (DiagnosticLog.shouldLog("pr6712.duplicate_inventory_rejected")) {
+        logger.info("@@@ pr=6712 event=duplicate_inventory_rejected"
+            + " count={}",
+            hashList.size());
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "Inventory contains duplicate hashes, size: " + hashList.size());
     }
 
     InventoryType type = inventoryMessage.getInventoryType();
     if (type != InventoryType.TRX && type != InventoryType.BLOCK) {
+      if (DiagnosticLog.shouldLog("pr6851.inventory_unknown_type_rejected")) {
+        logger.info("@@@ pr=6851 event=inventory_unknown_type_rejected"
+            + " type={}",
+            inventoryMessage.getInventory().getTypeValue());
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "unknown inventory type: " + inventoryMessage.getInventory().getTypeValue());
     }
@@ -82,6 +99,12 @@ public class InventoryMsgHandler implements TronMsgHandler {
     }
 
     if (type.equals(InventoryType.TRX) && transactionsMsgHandler.isBusy()) {
+      if (DiagnosticLog.shouldLog("pr6714.busy_transaction_inventory_dropped")) {
+        logger.info("@@@ pr=6714 event=busy_transaction_inventory_dropped"
+            + " count={} peer={}",
+            size,
+            peer.getInetSocketAddress());
+      }
       logger.warn("Drop inv: {} size: {} from Peer {}, transactionsMsgHandler is busy",
               type, size, peer.getInetAddress());
       if (Args.getInstance().isOpenPrintLog()) {

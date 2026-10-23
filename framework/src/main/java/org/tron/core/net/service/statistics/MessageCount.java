@@ -1,6 +1,7 @@
 package org.tron.core.net.service.statistics;
 
 import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 
 @Slf4j(topic = "net")
 public class MessageCount {
@@ -32,12 +33,27 @@ public class MessageCount {
     update();
     szCount[index]++;
     totalCount++;
+    if (DiagnosticLog.shouldLog("pr6970.synchronized_message_count_updated")) {
+      logger.info("@@@ pr=6970 event=synchronized_message_count_updated"
+          + " delta={} index={} total={}",
+          1,
+          index,
+          totalCount);
+    }
   }
 
   public synchronized void add(int count) {
     update();
     szCount[index] += count;
     totalCount += count;
+    if (count != 0
+        && DiagnosticLog.shouldLog("pr6970.synchronized_message_count_updated")) {
+      logger.info("@@@ pr=6970 event=synchronized_message_count_updated"
+          + " delta={} index={} total={}",
+          count,
+          index,
+          totalCount);
+    }
   }
 
   public synchronized int getCount(int interval) {

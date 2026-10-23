@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.overlay.message.Message;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.common.utils.Time;
@@ -169,8 +170,17 @@ public class AdvService {
 
     Item item = new Item(msg.getMessageId(), InventoryType.TRX);
     trxCount.add();
+    int resultCount = msg.getTransactionCapsule().getInstance().getRetCount();
     trxCache.put(item, new TransactionMessage(
         msg.getTransactionCapsule().getInstance().toBuilder().clearRet().build()));
+    if (resultCount > 0) {
+      if (DiagnosticLog.shouldLog("pr7050.cached_transaction_result_stripped_fast")) {
+        logger.info("@@@ pr=7050 event=cached_transaction_result_stripped_fast"
+            + " transaction={} removed={}",
+            item.getHash(),
+            resultCount);
+      }
+    }
 
     List<Sha256Hash> list = new ArrayList<>();
     list.add(msg.getMessageId());
@@ -217,8 +227,17 @@ public class AdvService {
       TransactionMessage trxMsg = (TransactionMessage) msg;
       item = new Item(trxMsg.getMessageId(), InventoryType.TRX);
       trxCount.add();
+      int resultCount = trxMsg.getTransactionCapsule().getInstance().getRetCount();
       trxCache.put(item, new TransactionMessage(
           trxMsg.getTransactionCapsule().getInstance().toBuilder().clearRet().build()));
+      if (resultCount > 0) {
+        if (DiagnosticLog.shouldLog("pr7050.cached_transaction_result_stripped_normal")) {
+          logger.info("@@@ pr=7050 event=cached_transaction_result_stripped_normal"
+              + " transaction={} removed={}",
+              item.getHash(),
+              resultCount);
+        }
+      }
     } else {
       logger.error("Adv item is neither block nor trx, type: {}", msg.getType());
       return;

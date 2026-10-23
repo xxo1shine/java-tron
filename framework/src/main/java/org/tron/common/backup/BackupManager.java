@@ -24,6 +24,7 @@ import org.tron.common.backup.socket.EventHandler;
 import org.tron.common.backup.socket.MessageHandler;
 import org.tron.common.backup.socket.UdpEvent;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.parameter.CommonParameter;
 import org.tron.p2p.utils.NetUtil;
 
@@ -67,6 +68,11 @@ public class BackupManager implements EventHandler {
   public void setStatus(BackupStatusEnum status) {
     logger.info("Change backup status to {}", status);
     this.status = status;
+    if (DiagnosticLog.shouldLog("pr6970.backup_status_published")) {
+      logger.info("@@@ pr=6970 event=backup_status_published"
+          + " status={}",
+          status);
+    }
   }
 
   public void init() {

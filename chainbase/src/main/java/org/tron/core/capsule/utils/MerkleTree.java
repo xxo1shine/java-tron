@@ -5,9 +5,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.Sha256Hash;
 
 @Getter
+@Slf4j(topic = "capsule")
 public class MerkleTree {
 
   private List<Sha256Hash> hashList;
@@ -25,6 +28,10 @@ public class MerkleTree {
     }
 
     tree.root = leaves.get(0);
+    if (DiagnosticLog.shouldLog("pr6816_per_instance_merkle_tree_built")) {
+      logger.info("@@@ pr=6816 event=per_instance_merkle_tree_built inputs={} nodes={}",
+          hashList.size(), tree.leaves.size());
+    }
     return tree;
   }
 

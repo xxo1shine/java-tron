@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.capsule.BlockCapsule.BlockId;
 import org.tron.core.config.Parameter.NetConstants;
 import org.tron.core.exception.P2pException;
@@ -59,6 +60,12 @@ public class SyncBlockChainMsgHandler implements TronMsgHandler {
 
   private boolean check(PeerConnection peer, SyncBlockChainMessage msg) throws P2pException {
     if (!peer.getP2pRateLimiter().tryAcquire(msg.getType().asByte())) {
+      if (DiagnosticLog.shouldLog("pr6966.sync_summary_rate_limited")) {
+        logger.info("@@@ pr=6966 event=sync_summary_rate_limited"
+            + " peer={} remaining={}",
+            peer.getInetSocketAddress(),
+            peer.getRemainNum());
+      }
       // Discard messages that exceed the rate limit
       logger.warn("{} message from peer {} exceeds the rate limit",
           msg.getType(), peer.getInetSocketAddress());
@@ -71,6 +78,12 @@ public class SyncBlockChainMsgHandler implements TronMsgHandler {
     }
 
     if (blockIds.size() > NetConstants.MAX_SYNC_CHAIN_IDS) {
+      if (DiagnosticLog.shouldLog("pr6712.oversized_sync_summary_rejected")) {
+        logger.info("@@@ pr=6712 event=oversized_sync_summary_rejected"
+            + " count={} max={}",
+            blockIds.size(),
+            NetConstants.MAX_SYNC_CHAIN_IDS);
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "SyncBlockChain blockIds size " + blockIds.size()
               + " exceeds limit " + NetConstants.MAX_SYNC_CHAIN_IDS);

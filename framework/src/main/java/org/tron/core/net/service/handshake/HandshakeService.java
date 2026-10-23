@@ -5,6 +5,7 @@ import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.ChainBaseManager;
 import org.tron.core.config.args.Args;
 import org.tron.core.net.TronNetService;
@@ -46,6 +47,11 @@ public class HandshakeService {
 
     if (msg.getHelloMessage().hasFrom()
         && !Objects.equals(peer.getChannel().getNodeId(), msg.getFrom().getHexId())) {
+      if (DiagnosticLog.shouldLog("pr6983.hello_identity_mismatch_rejected")) {
+        logger.info("@@@ pr=6983 event=hello_identity_mismatch_rejected"
+            + " peer={}",
+            peer.getInetSocketAddress());
+      }
       logger.warn("Peer {} sent an application HELLO with a different node ID",
           peer.getInetSocketAddress());
       peer.disconnect(ReasonCode.UNEXPECTED_IDENTITY);
@@ -116,6 +122,13 @@ public class HandshakeService {
             System.currentTimeMillis() - peer.getChannel().getStartTime());
     PeerManager.sortPeers();
     peer.onConnect();
+    if (!msg.getHelloMessage().hasFrom()) {
+      if (DiagnosticLog.shouldLog("pr6983.hello_without_endpoint_accepted")) {
+        logger.info("@@@ pr=6983 event=hello_without_endpoint_accepted"
+            + " peer={}",
+            peer.getInetSocketAddress());
+      }
+    }
   }
 
   private void sendHelloMessage(PeerConnection peer, long time) {

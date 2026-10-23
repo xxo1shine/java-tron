@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.crypto.SignUtils;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.MetricLabels;
 import org.tron.common.prometheus.Metrics;
@@ -81,8 +82,22 @@ public class TransactionsMsgHandler implements TronMsgHandler {
   }
 
   public boolean isBusy() {
-    return queue.size() + smartContractQueue.size()
-        + tronNetDelegate.getCachedTransactionSize() > Args.getInstance().getMaxTrxCacheSize();
+    int workerCount = queue.size();
+    int smartCount = smartContractQueue.size();
+    int cachedCount = tronNetDelegate.getCachedTransactionSize();
+    int maxCount = Args.getInstance().getMaxTrxCacheSize();
+    boolean busy = workerCount + smartCount + cachedCount > maxCount;
+    if (busy) {
+      if (DiagnosticLog.shouldLog("pr6714.transaction_backpressure_applied")) {
+        logger.info("@@@ pr=6714 event=transaction_backpressure_applied"
+            + " worker={} smart={} cached={} max={}",
+            workerCount,
+            smartCount,
+            cachedCount,
+            maxCount);
+      }
+    }
+    return busy;
   }
 
   @Override
@@ -150,11 +165,21 @@ public class TransactionsMsgHandler implements TronMsgHandler {
     for (Transaction trx : list) {
       Sha256Hash id = new TransactionCapsule(trx).getTransactionId();
       if (!seen.add(id)) {
+        if (DiagnosticLog.shouldLog("pr6712.duplicate_transaction_rejected")) {
+          logger.info("@@@ pr=6712 event=duplicate_transaction_rejected"
+              + " transaction={}",
+              id);
+        }
         throw new P2pException(TypeEnum.BAD_MESSAGE,
             "TransactionsMessage contains duplicate transaction: " + id);
       }
       Item item = new Item(id, InventoryType.TRX);
       if (!peer.getAdvInvRequest().containsKey(item)) {
+        if (DiagnosticLog.shouldLog("pr6983.unrequested_transaction_rejected")) {
+          logger.info("@@@ pr=6983 event=unrequested_transaction_rejected"
+              + " transaction={}",
+              id);
+        }
         throw new P2pException(TypeEnum.BAD_MESSAGE,
             "trx: " + id + " without request.");
       }

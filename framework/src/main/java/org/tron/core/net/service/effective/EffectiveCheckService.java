@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.config.args.Args;
 import org.tron.core.net.TronNetDelegate;
 import org.tron.core.net.TronNetService;
@@ -131,7 +132,17 @@ public class EffectiveCheckService {
           if (future.isCancelled()) {
             // Connection attempt cancelled by user
             cur = null;
+            if (DiagnosticLog.shouldLog("pr6983.connection_attempt_cancelled")) {
+              logger.info("@@@ pr=6983 event=connection_attempt_cancelled"
+                  + " candidate={}",
+                  candidateAddress);
+            }
           } else if (!future.isSuccess()) {
+            if (DiagnosticLog.shouldLog("pr6983.connection_attempt_failed")) {
+              logger.info("@@@ pr=6983 event=connection_attempt_failed"
+                  + " candidate={}",
+                  candidateAddress);
+            }
             logger.warn("Connect to chosen peer {} fail, cause:{}",
                 cur, future.cause().getMessage());
             future.channel().close();
@@ -139,6 +150,11 @@ public class EffectiveCheckService {
             triggerNext();
           } else {
             // Connection established successfully
+            if (DiagnosticLog.shouldLog("pr6983.tcp_connect_completed")) {
+              logger.info("@@@ pr=6983 event=tcp_connect_completed"
+                  + " candidate={}",
+                  candidateAddress);
+            }
           }
         });
     if (channelFuture == null) {

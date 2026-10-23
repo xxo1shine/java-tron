@@ -4,10 +4,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.tron.common.entity.NodeInfo.MachineInfo.DeadLockThreadInfo;
 import org.tron.common.entity.NodeInfo.MachineInfo.MemoryDescInfo;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.protos.Protocol;
 
+@Slf4j(topic = "net")
 public class NodeInfo {
 
   /*block information*/
@@ -144,9 +147,11 @@ public class NodeInfo {
       peerInfoBuilder.setLastSyncBlock(peerInfo.getLastSyncBlock());
       peerInfoBuilder.setRemainNum(peerInfo.getRemainNum());
       peerInfoBuilder.setLastBlockUpdateTime(peerInfo.getLastBlockUpdateTime());
-      peerInfoBuilder.setSyncFlag(peerInfo.isSyncFlag());
+      boolean syncFlag = peerInfo.isSyncFlag();
+      boolean needSyncFromPeer = peerInfo.isNeedSyncFromPeer();
+      peerInfoBuilder.setSyncFlag(syncFlag);
       peerInfoBuilder.setHeadBlockTimeWeBothHave(peerInfo.getHeadBlockTimeWeBothHave());
-      peerInfoBuilder.setNeedSyncFromPeer(peerInfo.isNeedSyncFromPeer());
+      peerInfoBuilder.setNeedSyncFromPeer(needSyncFromPeer);
       peerInfoBuilder.setNeedSyncFromUs(peerInfo.isNeedSyncFromUs());
       peerInfoBuilder.setHost(peerInfo.getHost());
       peerInfoBuilder.setPort(peerInfo.getPort());
@@ -166,6 +171,17 @@ public class NodeInfo {
       peerInfoBuilder.setDisconnectTimes(peerInfo.getDisconnectTimes());
       peerInfoBuilder.setLocalDisconnectReason(peerInfo.getLocalDisconnectReason());
       peerInfoBuilder.setRemoteDisconnectReason(peerInfo.getRemoteDisconnectReason());
+      if (peerInfoBuilder.getNeedSyncFromPeer() != needSyncFromPeer) {
+        if (DiagnosticLog.shouldLog("peer_sync_flag_mapping_mismatch")) {
+          logger.error("### pr=6930 event=peer_sync_flag_mapping_mismatch"
+                  + " expected={} actual={} syncFlag={}",
+              needSyncFromPeer, peerInfoBuilder.getNeedSyncFromPeer(), syncFlag);
+        }
+      } else if (needSyncFromPeer != syncFlag
+          && DiagnosticLog.shouldLog("peer_sync_flag_mapping_verified")) {
+        logger.info("@@@ pr=6930 event=peer_sync_flag_mapping_verified"
+            + " needSyncFromPeer={} syncFlag={}", needSyncFromPeer, syncFlag);
+      }
       builder.addPeerInfoList(peerInfoBuilder.build());
     }
     ConfigNodeInfo configNodeInfo = getConfigNodeInfo();

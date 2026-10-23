@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.util.encoders.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.Metrics;
 import org.tron.core.Constant;
@@ -153,6 +154,11 @@ public class BlockMsgHandler implements TronMsgHandler {
     try {
       tronNetDelegate.processBlock(block, false);
       peer.setBlockRcvTime(System.currentTimeMillis());
+      if (DiagnosticLog.shouldLog("pr6704.advertised_block_receive_time_updated")) {
+        logger.info("@@@ pr=6704 event=advertised_block_receive_time_updated"
+            + " block={}",
+            blockId);
+      }
       witnessProductBlockService.validWitnessProductTwoBlock(block);
 
       Item item = new Item(blockId, InventoryType.BLOCK);

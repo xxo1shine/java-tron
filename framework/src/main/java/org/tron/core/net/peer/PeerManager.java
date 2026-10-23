@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.MetricLabels;
 import org.tron.common.prometheus.Metrics;
@@ -93,6 +94,11 @@ public class PeerManager {
     } else {
       passivePeersCount.decrementAndGet();
     }
+    if (DiagnosticLog.shouldLog("pr6970.peer_removed_once")) {
+      logger.info("@@@ pr=6970 event=peer_removed_once"
+          + " peer={}",
+          peerConnection.getInetSocketAddress());
+    }
     return true;
   }
 
@@ -137,6 +143,18 @@ public class PeerManager {
   }
 
   private static synchronized void logPeerStats() {
+    int total = peers.size();
+    int active = activePeersCount.get();
+    int passive = passivePeersCount.get();
+    if (active < 0 || passive < 0 || (long) active + passive != total) {
+      if (DiagnosticLog.shouldLog("pr6970.peer_count_mismatch")) {
+        logger.error("### pr=6970 event=peer_count_mismatch"
+            + " all={} active={} passive={}",
+            total,
+            active,
+            passive);
+      }
+    }
     String str = String.format("\n\n============ Peer stats: all %d, active %d, passive %d\n\n",
             peers.size(), activePeersCount.get(), passivePeersCount.get());
     metric(peers.size(), MetricLabels.Gauge.PEERS_ALL);

@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.RateLimiter;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.config.args.Args;
 
 @Slf4j
@@ -15,7 +16,16 @@ public class QpsStrategy extends Strategy {
 
   public QpsStrategy(String paramString) {
     super(paramString);
-    rateLimiter = RateLimiter.create((Double) mapParams.get(STRATEGY_PARAM_QPS).value);
+    Object qpsValue = mapParams.get(STRATEGY_PARAM_QPS).value;
+    if (!(qpsValue instanceof Double) && DiagnosticLog.shouldLog("qps_parameter_type_mismatch")) {
+      logger.error("### pr=6983 event=qps_parameter_type_mismatch"
+              + " declaredType=Double actualType={}",
+          qpsValue == null ? "null" : qpsValue.getClass().getSimpleName());
+    }
+    rateLimiter = RateLimiter.create((Double) qpsValue);
+    if (DiagnosticLog.shouldLog("qps_strategy_constructed")) {
+      logger.info("@@@ pr=6983 event=qps_strategy_constructed qps={} valueType=Double", qpsValue);
+    }
   }
 
   // define the default strategy params

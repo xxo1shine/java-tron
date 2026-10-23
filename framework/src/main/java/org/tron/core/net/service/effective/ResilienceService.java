@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.parameter.CommonParameter;
 import org.tron.core.ChainBaseManager;
 import org.tron.core.config.args.Args;
@@ -98,6 +99,12 @@ public class ResilienceService {
       WeightedRandom weightedRandom = new WeightedRandom(weights);
       PeerConnection one = (PeerConnection) weightedRandom.next();
       disconnectFromPeer(one, ReasonCode.RANDOM_ELIMINATION, DisconnectCause.RANDOM_ELIMINATION);
+      if (DiagnosticLog.shouldLog("pr6704.rotation_disconnect_requested")) {
+        logger.info("@@@ pr=6704 event=rotation_disconnect_requested"
+            + " olderHalfCandidates={} peer={}",
+            peers.size(),
+            one.getInetSocketAddress());
+      }
       return;
     }
 

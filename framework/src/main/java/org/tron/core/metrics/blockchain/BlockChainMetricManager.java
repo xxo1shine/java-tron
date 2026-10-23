@@ -9,9 +9,11 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.util.encoders.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.MetricLabels;
 import org.tron.common.prometheus.Metrics;
@@ -24,6 +26,7 @@ import org.tron.core.metrics.MetricsUtil;
 import org.tron.core.metrics.net.RateInfo;
 import org.tron.protos.Protocol;
 
+@Slf4j
 @Component
 public class BlockChainMetricManager {
 
@@ -142,6 +145,11 @@ public class BlockChainMetricManager {
         MetricsUtil.counterInc(MetricsKey.BLOCKCHAIN_DUP_WITNESS + witnessAddress);
         Metrics.counterInc(MetricKeys.Counter.MINER, 1,
             StringUtil.encode58Check(address), MetricLabels.Counter.MINE_DUP);
+        if (DiagnosticLog.shouldLog("pr6970.duplicate_witness_metric_recorded")) {
+          logger.info("@@@ pr=6970 event=duplicate_witness_metric_recorded"
+              + " block={}",
+              block.getNum());
+        }
       }
     }
     witnessInfo.put(witnessAddress, block);
@@ -204,7 +212,16 @@ public class BlockChainMetricManager {
     for (Map.Entry<String, Counter> entry : dupWitnessMap.entrySet()) {
       DupWitnessInfo dupWitness = new DupWitnessInfo();
       String witness = entry.getKey().substring(MetricsKey.BLOCKCHAIN_DUP_WITNESS.length());
-      long blockNum = dupWitnessBlockNum.getOrDefault(witness, 0L);
+      Long recordedBlockNum = dupWitnessBlockNum.get(witness);
+      long blockNum = recordedBlockNum == null ? 0L : recordedBlockNum;
+      if (recordedBlockNum == null) {
+        if (DiagnosticLog.shouldLog("pr6970.duplicate_witness_height_defaulted")) {
+          logger.info("@@@ pr=6970 event=duplicate_witness_height_defaulted"
+              + " height={} counter={}",
+              blockNum,
+              entry.getValue().getCount());
+        }
+      }
       dupWitness.setAddress(witness);
       dupWitness.setBlockNum(blockNum);
       dupWitness.setCount((int) entry.getValue().getCount());

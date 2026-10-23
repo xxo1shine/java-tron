@@ -7,8 +7,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.metrics.MetricsKey;
 import org.tron.core.metrics.MetricsUtil;
 import org.tron.core.net.TronNetDelegate;
@@ -17,6 +19,7 @@ import org.tron.protos.Protocol;
 
 
 @Component
+@Slf4j(topic = "net")
 public class NetMetricManager {
 
   @Autowired
@@ -185,6 +188,21 @@ public class NetMetricManager {
     RateInfo udpOutTraffic = net.getUdpOutTraffic();
     Protocol.MetricsInfo.RateInfo udpOutTrafficInfo = udpOutTraffic.toProtoEntity();
     netInfo.setUdpOutTraffic(udpOutTrafficInfo);
+    boolean tcpOutMatches = netInfo.getTcpOutTraffic().equals(tcpOUTrafficInfo);
+    boolean udpInMatches = netInfo.getUdpInTraffic().equals(udpInTrafficInfo);
+    if (!tcpOutMatches || !udpInMatches) {
+      if (DiagnosticLog.shouldLog("traffic_mapping_mismatch")) {
+        logger.error("### pr=6930 event=traffic_mapping_mismatch"
+                + " tcpOutMatches={} udpInMatches={} expectedTcpOut={} actualTcpOut={}"
+                + " expectedUdpIn={} actualUdpIn={}", tcpOutMatches, udpInMatches,
+            tcpOUTrafficInfo.getCount(), netInfo.getTcpOutTraffic().getCount(),
+            udpInTrafficInfo.getCount(), netInfo.getUdpInTraffic().getCount());
+      }
+    } else if (!tcpOUTrafficInfo.equals(udpInTrafficInfo)
+        && DiagnosticLog.shouldLog("traffic_mapping_verified")) {
+      logger.info("@@@ pr=6930 event=traffic_mapping_verified tcpOutCount={} udpInCount={}",
+          tcpOUTrafficInfo.getCount(), udpInTrafficInfo.getCount());
+    }
 
     // latency
     Protocol.MetricsInfo.NetInfo.LatencyInfo.Builder latencyInfo =

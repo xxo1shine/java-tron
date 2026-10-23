@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.logsfilter.EventPluginLoader;
 import org.tron.core.db.Manager;
 import org.tron.core.services.event.bo.BlockEvent;
@@ -37,8 +38,13 @@ public class BlockEventLoad {
   public void init() {
     executor.scheduleWithFixedDelay(() -> {
       try {
-        if (!instance.isBusy() && !realtimeEventService.isBusy()) {
+        boolean pluginBusy = instance.isBusy();
+        boolean realtimeBusy = !pluginBusy && realtimeEventService.isBusy();
+        if (!pluginBusy && !realtimeBusy) {
           load();
+        } else if (DiagnosticLog.shouldLog("event_load_paused")) {
+          logger.info("@@@ pr=6965 event=event_load_paused consumer={}",
+              pluginBusy ? "plugin" : "realtime");
         }
       } catch (Exception e) {
         close();

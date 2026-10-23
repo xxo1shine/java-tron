@@ -20,6 +20,7 @@ import javax.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jetty.http.BadMessageException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.parameter.RateLimiterInitialization;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.MetricLabels;
@@ -203,6 +204,10 @@ public abstract class RateLimiterServlet extends HttpServlet {
           Metrics.histogramObserve(requestTimer);
         } else {
           Util.writeAuditedError(Util.RATE_LIMITER_ERROR_MSG, resp);
+          if (DiagnosticLog.shouldLog("http_rate_limit_response_attempted")) {
+            logger.info("@@@ pr=6733 event=http_rate_limit_response_attempted servlet={} stage={}",
+                getClass().getSimpleName(), perEndpointAcquired ? "global" : "endpoint");
+          }
         }
       } catch (ServletException | IOException | BadMessageException e) {
         throw e;
@@ -218,6 +223,10 @@ public abstract class RateLimiterServlet extends HttpServlet {
       // completion path and the case where GlobalRateLimiter rejected the request).
       if (rateLimiter instanceof IPreemptibleRateLimiter && perEndpointAcquired) {
         ((IPreemptibleRateLimiter) rateLimiter).release();
+        if (DiagnosticLog.shouldLog("http_endpoint_permit_released")) {
+          logger.info("@@@ pr=6733 event=http_endpoint_permit_released servlet={} admitted={}",
+              getClass().getSimpleName(), acquireResource);
+        }
       }
     }
   }

@@ -27,6 +27,7 @@ public class NativeMessageQueueTest {
   public void setUp() {
     publisher = mock(ZMQ.Socket.class);
     when(publisher.bind(anyString())).thenReturn(true);
+    when(publisher.getSndHWM()).thenReturn(1000);
     contexts = mockConstruction(ZContext.class, (context, construction) ->
         when(context.createSocket(SocketType.PUB)).thenReturn(publisher));
     queue = new NativeMessageQueue();
@@ -73,12 +74,14 @@ public class NativeMessageQueueTest {
 
     InOrder delivery = inOrder(publisher);
     delivery.verify(publisher).bind("tcp://*:6000");
+    delivery.verify(publisher).getSndHWM();
     delivery.verify(publisher).sendMore("topic");
     delivery.verify(publisher).send("payload");
     delivery.verifyNoMoreInteractions();
   }
 
   private void assertStartup(int port, int queueLength, int expectedPort, int expectedQueueLength) {
+    when(publisher.getSndHWM()).thenReturn(expectedQueueLength);
     Assert.assertTrue(queue.start(port, queueLength));
     Assert.assertEquals(1, contexts.constructed().size());
     ZContext context = contexts.constructed().get(0);
@@ -88,6 +91,7 @@ public class NativeMessageQueueTest {
     startup.verify(context).setSndHWM(expectedQueueLength);
     startup.verify(context).createSocket(SocketType.PUB);
     startup.verify(publisher).bind("tcp://*:" + expectedPort);
+    startup.verify(publisher).getSndHWM();
     startup.verifyNoMoreInteractions();
   }
 }

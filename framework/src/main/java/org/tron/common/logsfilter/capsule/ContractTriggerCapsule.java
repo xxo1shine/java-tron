@@ -11,6 +11,7 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.bouncycastle.util.encoders.Hex;
 import org.pf4j.util.StringUtils;
 import org.tron.common.crypto.Hash;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.logsfilter.ContractEventParserAbi;
 import org.tron.common.logsfilter.EventPluginLoader;
 import org.tron.common.logsfilter.trigger.ContractEventTrigger;
@@ -135,15 +136,26 @@ public class ContractTriggerCapsule extends TriggerCapsule {
           EventPluginLoader.getInstance().postContractEventTrigger((ContractEventTrigger) event);
         }
 
-        if (EventPluginLoader.getInstance().isSolidityEventTriggerEnable()
-            && !contractTrigger.isRemoved()) {
+        boolean solidityEventEnabled = EventPluginLoader.getInstance()
+            .isSolidityEventTriggerEnable();
+        if (solidityEventEnabled && !contractTrigger.isRemoved()) {
+          boolean removedAtEnqueue = event.isRemoved();
           boolean result = Args.getSolidityContractEventTriggerMap().computeIfAbsent(event
               .getBlockNumber(), listBlk -> new LinkedBlockingQueue())
                   .offer((ContractEventTrigger) event);
+          if (result && removedAtEnqueue
+              && DiagnosticLog.shouldLog("removed_solidity_event_enqueued")) {
+            logger.error("### pr=6718 event=removed_solidity_event_enqueued block={} tx={}",
+                event.getBlockNumber(), event.getTransactionId());
+          }
           if (!result) {
             logger.info("too many triggers, solidity event trigger lost: {}",
                 event.getUniqueId());
           }
+        } else if (solidityEventEnabled
+            && DiagnosticLog.shouldLog("removed_solidity_event_filtered")) {
+          logger.info("@@@ pr=6718 event=removed_solidity_event_filtered block={} tx={}",
+              event.getBlockNumber(), event.getTransactionId());
         }
 
         // enable process contractEvent as contractLog
@@ -159,15 +171,26 @@ public class ContractTriggerCapsule extends TriggerCapsule {
             EventPluginLoader.getInstance().postContractLogTrigger(logTrigger);
           }
 
-          if (EventPluginLoader.getInstance().isSolidityLogTriggerRedundancy()
-              && !contractTrigger.isRemoved()) {
+          boolean solidityRedundancyEnabled = EventPluginLoader.getInstance()
+              .isSolidityLogTriggerRedundancy();
+          if (solidityRedundancyEnabled && !contractTrigger.isRemoved()) {
+            boolean removedAtEnqueue = logTrigger.isRemoved();
             boolean result = Args.getSolidityContractLogTriggerMap().computeIfAbsent(event
                 .getBlockNumber(), listBlk -> new LinkedBlockingQueue())
                 .offer(logTrigger);
+            if (result && removedAtEnqueue
+                && DiagnosticLog.shouldLog("removed_solidity_redundancy_enqueued")) {
+              logger.error("### pr=6718 event=removed_solidity_redundancy_enqueued block={} tx={}",
+                  logTrigger.getBlockNumber(), logTrigger.getTransactionId());
+            }
             if (!result) {
               logger.info("too many triggers, solidity log trigger lost: {}",
                   logTrigger.getUniqueId());
             }
+          } else if (solidityRedundancyEnabled
+              && DiagnosticLog.shouldLog("removed_solidity_redundancy_filtered")) {
+            logger.info("@@@ pr=6718 event=removed_solidity_redundancy_filtered block={} tx={}",
+                logTrigger.getBlockNumber(), logTrigger.getTransactionId());
           }
         }
       } else {
@@ -175,15 +198,25 @@ public class ContractTriggerCapsule extends TriggerCapsule {
           EventPluginLoader.getInstance().postContractLogTrigger((ContractLogTrigger) event);
         }
 
-        if (EventPluginLoader.getInstance().isSolidityLogTriggerEnable()
-            && !contractTrigger.isRemoved()) {
+        boolean solidityLogEnabled = EventPluginLoader.getInstance().isSolidityLogTriggerEnable();
+        if (solidityLogEnabled && !contractTrigger.isRemoved()) {
+          boolean removedAtEnqueue = event.isRemoved();
           boolean result = Args.getSolidityContractLogTriggerMap().computeIfAbsent(event
               .getBlockNumber(), listBlk -> new LinkedBlockingQueue())
                   .offer((ContractLogTrigger) event);
+          if (result && removedAtEnqueue
+              && DiagnosticLog.shouldLog("removed_solidity_log_enqueued")) {
+            logger.error("### pr=6718 event=removed_solidity_log_enqueued block={} tx={}",
+                event.getBlockNumber(), event.getTransactionId());
+          }
           if (!result) {
             logger.info("too many triggers, solidity log trigger lost: {}",
                 event.getUniqueId());
           }
+        } else if (solidityLogEnabled
+            && DiagnosticLog.shouldLog("removed_solidity_log_filtered")) {
+          logger.info("@@@ pr=6718 event=removed_solidity_log_filtered block={} tx={}",
+              event.getBlockNumber(), event.getTransactionId());
         }
       }
     }

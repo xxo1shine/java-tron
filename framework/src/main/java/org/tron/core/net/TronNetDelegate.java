@@ -18,6 +18,7 @@ import org.bouncycastle.util.encoders.Hex;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.backup.socket.BackupServer;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.overlay.message.Message;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.MetricLabels;
@@ -312,6 +313,12 @@ public class TronNetDelegate {
           | EventBloomException e) {
         metricsService.failProcessBlock(block.getNum(), e.getMessage());
         logger.error("Process block failed, {}, reason: {}", blockId.getString(), e.getMessage());
+        if (DiagnosticLog.shouldLog("pr7050.block_failure_classified")) {
+          logger.info("@@@ pr=7050 event=block_failure_classified"
+              + " block={} error={}",
+              blockId,
+              e.getClass().getSimpleName());
+        }
         throw new P2pException(TypeEnum.BAD_BLOCK, e);
       }
     }
@@ -341,12 +348,25 @@ public class TronNetDelegate {
   public void validBlock(BlockCapsule block) throws P2pException {
     long time = System.currentTimeMillis();
     if (block.getTimeStamp() - time > timeout) {
+      if (DiagnosticLog.shouldLog("pr6716.block_future_time_rejected")) {
+        logger.info("@@@ pr=6716 commit=342130074a event=block_future_time_rejected"
+            + " blockTime={} now={} timeout={}",
+            block.getTimeStamp(),
+            time,
+            timeout);
+      }
       throw new P2pException(TypeEnum.BAD_BLOCK,
           "time:" + time + ",block time:" + block.getTimeStamp());
     }
     for (Transaction transaction : block.getInstance().getTransactionsList()) {
       int contractCount = transaction.getRawData().getContractCount();
       if (contractCount != 1) {
+        if (DiagnosticLog.shouldLog("pr6716.block_contract_count_rejected")) {
+          logger.info("@@@ pr=6716 commit=342130074a event=block_contract_count_rejected"
+              + " block={} count={}",
+              block.getBlockId(),
+              contractCount);
+        }
         throw new P2pException(TypeEnum.BAD_BLOCK,
             "Invalid contract count: " + contractCount
                 + ", block: " + block.getBlockId().getString());
@@ -355,6 +375,11 @@ public class TronNetDelegate {
     try {
       block.validateMerkleRoot();
     } catch (BadBlockException e) {
+      if (DiagnosticLog.shouldLog("pr6791.block_merkle_rejected")) {
+        logger.info("@@@ pr=6791 event=block_merkle_rejected"
+            + " block={}",
+            block.getBlockId());
+      }
       throw new P2pException(TypeEnum.BLOCK_MERKLE_INVALID, e.getMessage());
     }
     boolean signatureValid;
@@ -362,19 +387,46 @@ public class TronNetDelegate {
       signatureValid = block.validateSignature(dbManager.getDynamicPropertiesStore(),
           dbManager.getAccountStore());
     } catch (Exception e) {
+      if (DiagnosticLog.shouldLog("pr6791.block_signature_exception")) {
+        logger.info("@@@ pr=6791 event=block_signature_exception"
+            + " block={} error={}",
+            block.getBlockId(),
+            e.getClass().getSimpleName());
+      }
       throw new P2pException(TypeEnum.BLOCK_SIGN_INVALID, e);
     }
     if (!signatureValid) {
+      if (DiagnosticLog.shouldLog("pr6791.block_signature_rejected")) {
+        logger.info("@@@ pr=6791 event=block_signature_rejected"
+            + " block={}",
+            block.getBlockId());
+      }
       throw new P2pException(TypeEnum.BLOCK_SIGN_INVALID, "valid signature failed.");
+    }
+    if (DiagnosticLog.shouldLog("pr6716.block_prevalidated")) {
+      logger.info("@@@ pr=6716 commit=342130074a event=block_prevalidated"
+          + " block={} transactions={}",
+          block.getBlockId(),
+          block.getInstance().getTransactionsCount());
     }
   }
 
   public void validAdvBlock(BlockCapsule block) throws P2pException {
     if (!witnessScheduleStore.getActiveWitnesses().contains(block.getWitnessAddress())) {
+      if (DiagnosticLog.shouldLog("pr7050.inactive_witness_rejected")) {
+        logger.info("@@@ pr=7050 event=inactive_witness_rejected"
+            + " block={}",
+            block.getBlockId());
+      }
       throw new P2pException(TypeEnum.BAD_BLOCK,
           "Block witness is not active: " + block.getBlockId().getString());
     }
     validBlock(block);
+    if (DiagnosticLog.shouldLog("pr6716.advertised_block_prevalidated")) {
+      logger.info("@@@ pr=6716 commit=342130074a event=advertised_block_prevalidated"
+          + " block={}",
+          block.getBlockId());
+    }
   }
 
   public PbftSignCapsule getBlockPbftCommitData(long blockNum) {

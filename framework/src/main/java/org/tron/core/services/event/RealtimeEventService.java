@@ -4,13 +4,16 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.logsfilter.EventPluginLoader;
+import org.tron.common.logsfilter.capsule.BlockLogTriggerCapsule;
+import org.tron.common.logsfilter.trigger.BlockLogTrigger;
+import org.tron.common.logsfilter.trigger.TransactionLogTrigger;
 import org.tron.common.logsfilter.trigger.Trigger;
 import org.tron.core.services.event.bo.BlockEvent;
 import org.tron.core.services.event.bo.Event;
@@ -56,7 +59,14 @@ public class RealtimeEventService {
   }
 
   public void add(Event event) {
-    queue.offer(event);
+    boolean accepted = queue.offer(event);
+    int queueSize = queue.size();
+    if (accepted && queueSize >= BUSY_EVENT_SIZE
+        && DiagnosticLog.shouldLog("realtime_event_retained")) {
+      logger.info("@@@ pr=6965 event=realtime_event_retained queueSize={}"
+              + " busyThreshold={} removed={}",
+          queueSize, BUSY_EVENT_SIZE, event.isRemove());
+    }
   }
 
   public boolean isBusy() {
@@ -83,8 +93,23 @@ public class RealtimeEventService {
       if (blockEvent.getBlockLogTriggerCapsule() == null) {
         logger.warn("BlockLogTriggerCapsule is null. {}", blockEvent.getBlockId().getString());
       } else {
-        blockEvent.getBlockLogTriggerCapsule().setRemoved(isRemove);
-        blockEvent.getBlockLogTriggerCapsule().processTrigger();
+        BlockLogTriggerCapsule capsule = blockEvent.getBlockLogTriggerCapsule();
+        capsule.setRemoved(isRemove);
+        BlockLogTrigger trigger = capsule.getBlockLogTrigger();
+        boolean actualRemoved = trigger != null && trigger.isRemoved();
+        boolean flagMatches = trigger != null && actualRemoved == isRemove;
+        if (trigger != null && !flagMatches
+            && DiagnosticLog.shouldLog("block_rollback_flag_mismatch")) {
+          logger.error("### pr=6833,6965 event=block_rollback_flag_mismatch block={}"
+                  + " expected={} actual={}",
+              blockEvent.getBlockId().getString(), isRemove, actualRemoved);
+        }
+        capsule.processTrigger();
+        if (flagMatches && DiagnosticLog.shouldLog(isRemove
+            ? "rollback_block_dispatch_returned" : "forward_block_dispatch_returned")) {
+          logger.info("@@@ pr=6833,6965 event=block_dispatch_returned block={} removed={}",
+              blockEvent.getBlockId().getString(), isRemove);
+        }
       }
     }
 
@@ -96,7 +121,22 @@ public class RealtimeEventService {
       } else {
         blockEvent.getTransactionLogTriggerCapsules().forEach(v -> {
           v.setRemoved(isRemove);
+          TransactionLogTrigger trigger = v.getTransactionLogTrigger();
+          boolean actualRemoved = trigger != null && trigger.isRemoved();
+          boolean flagMatches = trigger != null && actualRemoved == isRemove;
+          if (trigger != null && !flagMatches
+              && DiagnosticLog.shouldLog("transaction_rollback_flag_mismatch")) {
+            logger.error("### pr=6833,6965 event=transaction_rollback_flag_mismatch block={}"
+                    + " expected={} actual={}",
+                blockEvent.getBlockId().getString(), isRemove, actualRemoved);
+          }
           v.processTrigger();
+          String diagnosticEvent = isRemove
+              ? "rollback_transaction_dispatch_returned" : "forward_transaction_dispatch_returned";
+          if (flagMatches && DiagnosticLog.shouldLog(diagnosticEvent)) {
+            logger.info("@@@ pr=6833,6965 event=transaction_dispatch_returned block={} removed={}",
+                blockEvent.getBlockId().getString(), isRemove);
+          }
         });
       }
     }

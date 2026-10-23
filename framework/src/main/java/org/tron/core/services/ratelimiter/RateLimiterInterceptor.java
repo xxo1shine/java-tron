@@ -16,6 +16,7 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.parameter.RateLimiterInitialization.RpcRateLimiterItem;
 import org.tron.core.config.args.Args;
 import org.tron.core.metrics.MetricsKey;
@@ -117,8 +118,17 @@ public class RateLimiterInterceptor implements ServerInterceptor {
       // Release the per-endpoint permit when global rejected, to avoid semaphore leak.
       if (rateLimiter instanceof IPreemptibleRateLimiter && perEndpointAcquired) {
         ((IPreemptibleRateLimiter) rateLimiter).release();
+        if (DiagnosticLog.shouldLog("grpc_global_rejection_permit_released")) {
+          logger.info("@@@ pr=6733 event=grpc_global_rejection_permit_released method={}",
+              call.getMethodDescriptor().getFullMethodName());
+        }
       }
       call.close(Status.fromCode(Code.RESOURCE_EXHAUSTED), new Metadata());
+      if (DiagnosticLog.shouldLog("grpc_rate_limit_rejected")) {
+        logger.info("@@@ pr=6733 event=grpc_rate_limit_rejected method={} stage={}",
+            call.getMethodDescriptor().getFullMethodName(),
+            perEndpointAcquired ? "global" : "endpoint");
+      }
       return listener;
     }
 
@@ -147,6 +157,10 @@ public class RateLimiterInterceptor implements ServerInterceptor {
       // next.startCall() failed — release the permit that was already acquired.
       if (rateLimiter instanceof IPreemptibleRateLimiter) {
         ((IPreemptibleRateLimiter) rateLimiter).release();
+        if (DiagnosticLog.shouldLog("grpc_init_failure_permit_released")) {
+          logger.info("@@@ pr=6733 event=grpc_init_failure_permit_released method={}",
+              call.getMethodDescriptor().getFullMethodName());
+        }
       }
       String grpcFailMeterName = MetricsKey.NET_API_DETAIL_FAIL_QPS
           + call.getMethodDescriptor().getFullMethodName();

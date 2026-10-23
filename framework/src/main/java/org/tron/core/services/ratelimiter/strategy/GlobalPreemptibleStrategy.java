@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 
 @Slf4j
 public class GlobalPreemptibleStrategy extends Strategy {
@@ -13,10 +14,12 @@ public class GlobalPreemptibleStrategy extends Strategy {
   public static final int DEFAULT_PERMIT_NUM = 1;
   public static final int DEFAULT_ACQUIRE_TIMEOUT = 2;
   private Semaphore sp;
+  private final int maxPermits;
 
   public GlobalPreemptibleStrategy(String paramString) {
     super(paramString);
-    sp = new Semaphore((Integer) mapParams.get(STRATEGY_PARAM_PERMIT).value);
+    maxPermits = (Integer) mapParams.get(STRATEGY_PARAM_PERMIT).value;
+    sp = new Semaphore(maxPermits);
   }
 
   // define the default strategy params.
@@ -48,6 +51,12 @@ public class GlobalPreemptibleStrategy extends Strategy {
 
   public void release() {
     sp.release();
+    int available = sp.availablePermits();
+    // Concurrent acquisitions can lower this snapshot, but cannot create excess permits.
+    if (available > maxPermits && DiagnosticLog.shouldLog("semaphore_over_release")) {
+      logger.error("### pr=6733 event=semaphore_over_release limit={} available={}",
+          maxPermits, available);
+    }
   }
 
 }

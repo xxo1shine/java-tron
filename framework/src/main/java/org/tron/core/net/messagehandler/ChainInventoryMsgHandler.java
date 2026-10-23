@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.capsule.BlockCapsule.BlockId;
 import org.tron.core.config.Parameter.ChainConstant;
 import org.tron.core.config.Parameter.NetConstants;
@@ -75,6 +76,11 @@ public class ChainInventoryMsgHandler implements TronMsgHandler {
         if (toFetch.remove(next)) {
           blockId = next;
           peer.setBlockBothHave(blockId);
+          if (DiagnosticLog.shouldLog("pr6983.known_sync_block_removed")) {
+            logger.info("@@@ pr=6983 event=known_sync_block_removed"
+                + " block={}",
+                blockId);
+          }
         }
       }
       if (blockId != null) {
@@ -86,8 +92,18 @@ public class ChainInventoryMsgHandler implements TronMsgHandler {
           || (chainInventoryMessage.getRemainNum() != 0
           && peer.getSyncBlockToFetch().size() > syncFetchBatchNum)) {
         syncService.setFetchFlag(true);
+        if (DiagnosticLog.shouldLog("pr6970.chain_inventory_fetch_scheduled")) {
+          logger.info("@@@ pr=6970 event=chain_inventory_fetch_scheduled"
+              + " remaining={}",
+              chainInventoryMessage.getRemainNum());
+        }
       } else {
         syncService.syncNext(peer);
+        if (DiagnosticLog.shouldLog("pr6970.chain_inventory_summary_path_selected")) {
+          logger.info("@@@ pr=6970 event=chain_inventory_summary_path_selected"
+              + " remaining={}",
+              chainInventoryMessage.getRemainNum());
+        }
       }
     }
   }
@@ -103,6 +119,11 @@ public class ChainInventoryMsgHandler implements TronMsgHandler {
     }
 
     if (msg.getRemainNum() < 0) {
+      if (DiagnosticLog.shouldLog("pr6966.negative_sync_remaining_rejected")) {
+        logger.info("@@@ pr=6966 event=negative_sync_remaining_rejected"
+            + " remaining={}",
+            msg.getRemainNum());
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "remainNum is negative: " + msg.getRemainNum());
     }
@@ -138,6 +159,14 @@ public class ChainInventoryMsgHandler implements TronMsgHandler {
       long lastNum = blockIds.get(blockIds.size() - 1).getNum();
       long declaredHighestNum = lastNum + msg.getRemainNum();
       if (declaredHighestNum < 0 || declaredHighestNum > maxFutureNum) {
+        if (DiagnosticLog.shouldLog("pr6966.invalid_sync_tip_rejected")) {
+          logger.info("@@@ pr=6966 event=invalid_sync_tip_rejected"
+              + " declared={} last={} remaining={} max={}",
+              declaredHighestNum,
+              lastNum,
+              msg.getRemainNum(),
+              maxFutureNum);
+        }
         throw new P2pException(TypeEnum.BAD_MESSAGE,
             "Invalid declared highest block number: " + declaredHighestNum
                 + ", lastNum: " + lastNum + ", remainNum: " + msg.getRemainNum()

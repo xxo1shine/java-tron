@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.Pair;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.core.capsule.BlockCapsule;
@@ -197,17 +198,32 @@ public class KhaosDatabase {
         this.blk = blk;
       } else {
         this.rawData = blk.getData();
+        if (DiagnosticLog.shouldLog("pr7047_khaos_raw_cached")) {
+          logger.info("@@@ pr=7047 event=khaos_raw_cached block={} rawBytes={}",
+              id, rawData == null ? 0 : rawData.length);
+        }
       }
     }
 
     /** Queries must not retain decoded objects for an unprocessed block. */
     public synchronized BlockCapsule getBlk() {
+      boolean hasCapsule = blk != null;
+      boolean hasRawData = rawData != null;
+      if (hasCapsule == hasRawData
+          && DiagnosticLog.shouldLog("pr7047_khaos_representation_invalid")) {
+        logger.error("### pr=7047 event=khaos_representation_invalid block={} "
+                + "hasCapsule={} hasRawData={}", id, hasCapsule, hasRawData);
+      }
       if (blk != null) {
         return blk;
       }
       try {
         BlockCapsule block = new BlockCapsule(rawData);
         block.generatedByMyself = generatedByMyself;
+        if (DiagnosticLog.shouldLog("pr7047_khaos_raw_decoded_without_retention")) {
+          logger.info("@@@ pr=7047 event=khaos_raw_decoded_without_retention "
+              + "block={} rawBytes={}", id, rawData.length);
+        }
         return block;
       } catch (BadItemException e) {
         throw new IllegalStateException("Cannot decode cached block " + id, e);
@@ -220,11 +236,21 @@ public class KhaosDatabase {
 
     /** Retain the executed capsule only after its database session commits successfully. */
     synchronized void commit(BlockCapsule block) {
-      if (!id.equals(block.getBlockId())) {
+      BlockId committedId = block.getBlockId();
+      if (!id.equals(committedId)) {
+        if (DiagnosticLog.shouldLog("pr7047_khaos_commit_id_mismatch")) {
+          logger.error("### pr=7047 event=khaos_commit_id_mismatch expected={} actual={}",
+              id, committedId);
+        }
         throw new IllegalArgumentException("Committed block ID does not match " + id);
       }
+      int rawBytes = rawData == null ? 0 : rawData.length;
       blk = block;
       rawData = null;
+      if (rawBytes > 0 && DiagnosticLog.shouldLog("pr7047_khaos_raw_reference_cleared")) {
+        logger.info("@@@ pr=7047 event=khaos_raw_reference_cleared block={} rawBytes={}",
+            id, rawBytes);
+      }
     }
 
     public KhaosBlock getParent() {

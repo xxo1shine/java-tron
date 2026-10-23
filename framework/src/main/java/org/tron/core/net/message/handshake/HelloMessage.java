@@ -2,7 +2,9 @@ package org.tron.core.net.message.handshake;
 
 import com.google.protobuf.ByteString;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.ByteArray;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.common.utils.WalletUtil;
@@ -20,6 +22,7 @@ import org.tron.protos.Discover.Endpoint;
 import org.tron.protos.Protocol;
 import org.tron.protos.Protocol.HelloMessage.Builder;
 
+@Slf4j(topic = "net")
 public class HelloMessage extends TronMessage {
 
   @Getter
@@ -29,7 +32,28 @@ public class HelloMessage extends TronMessage {
     super(MessageTypes.P2P_HELLO.asByte(), data);
     this.helloMessage = ProtoUtil.parseFrom(Protocol.HelloMessage.parser(), data);
     this.data = this.helloMessage.toByteArray();
+    int unknownFields = helloMessage.getUnknownFields().asMap().size();
+    if (unknownFields != 0) {
+      if (DiagnosticLog.shouldLog("pr7048.hello_unknown_fields_retained")) {
+        logger.error("### pr=7048 event=unknown_fields_retained type=hello count={}",
+            unknownFields);
+      }
+    } else if (data.length > helloMessage.getSerializedSize()
+        && DiagnosticLog.shouldLog("pr7048.hello_proto_compacted")) {
+      logger.info("@@@ pr=7048 event=transient_proto_compacted type=hello "
+          + "wireBytes={} protoBytes={} unknownFields=0", data.length,
+          helloMessage.getSerializedSize());
+    }
+    if (this.data.length != helloMessage.getSerializedSize()
+        && DiagnosticLog.shouldLog("pr7048.hello_payload_not_normalized")) {
+      logger.error("### pr=7048 event=hello_payload_not_normalized retainedBytes={} protoBytes={}",
+          this.data.length, helloMessage.getSerializedSize());
+    }
     if (!valid()) {
+      if (DiagnosticLog.shouldLog("pr6983.invalid_hello_rejected")) {
+        logger.info("@@@ pr=6983 event=invalid_hello_rejected version={} timestamp={}",
+            helloMessage.getVersion(), helloMessage.getTimestamp());
+      }
       throw new P2pException(P2pException.TypeEnum.BAD_MESSAGE, "invalid hello message");
     }
   }

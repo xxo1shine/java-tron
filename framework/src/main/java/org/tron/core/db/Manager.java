@@ -55,6 +55,7 @@ import org.tron.common.cron.CronExpression;
 import org.tron.common.crypto.SignUtils;
 import org.tron.common.es.ExecutorServiceManager;
 import org.tron.common.exit.ExitManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.logsfilter.EventPluginLoader;
 import org.tron.common.logsfilter.FilterQuery;
 import org.tron.common.logsfilter.capsule.BlockFilterCapsule;
@@ -1003,7 +1004,13 @@ public class Manager {
       logger.info("End to erase block: {}.", oldHeadBlock);
       oldHeadBlock.getTransactions().forEach(tc -> {
         if (isMultiSignTransaction(tc.getInstance())) {
-          ownerAddressSet.add(ByteArray.toHexString(tc.getOwnerAddress()));
+          String ownerAddress = ByteArray.toHexString(tc.getOwnerAddress());
+          boolean newlyTracked = ownerAddressSet.add(ownerAddress);
+          if (DiagnosticLog.shouldLog("pr7050_rollback_permission_owner_tracked")) {
+            logger.info("@@@ pr=7050 event=rollback_permission_owner_tracked "
+                    + "block={} tx={} owner={} newlyTracked={}",
+                oldHeadBlock.getBlockId(), tc.getTransactionId(), ownerAddress, newlyTracked);
+          }
         }
         poppedTransactions.add(new TransactionCapsule(tc.getInstance()));
       });
@@ -1112,12 +1119,23 @@ public class Manager {
             throw new ValidateSignatureException(
                 "switch fork: block " + item.getNum() + " signature invalid");
           }
+          if (DiagnosticLog.shouldLog("pr6777_fork_block_signature_revalidated")) {
+            logger.info("@@@ pr=6777 event=fork_block_signature_revalidated block={}",
+                item.getId());
+          }
           // The new branch is applied on a rewound, diverged state where account permissions
           // may have changed, so a cached signature-verification result is no longer
           // trustworthy. Clear it to force every transaction to re-validate its signature
           // against the fork-chain state.
+          int resetTransactions = 0;
           for (TransactionCapsule tx : forkBlock.getTransactions()) {
             tx.setVerified(false);
+            resetTransactions++;
+          }
+          if (resetTransactions > 0
+              && DiagnosticLog.shouldLog("pr6864_fork_tx_verification_cache_cleared")) {
+            logger.info("@@@ pr=6864 event=fork_tx_verification_cache_cleared "
+                + "block={} transactions={}", item.getId(), resetTransactions);
           }
           applyBlock(forkBlock.setSwitch(true));
           tmpSession.commit();
@@ -1155,11 +1173,20 @@ public class Manager {
               throw restoreException;
             }
           }
+          if (DiagnosticLog.shouldLog("pr7047_fork_previous_branch_restored")) {
+            logger.info("@@@ pr=7047 event=fork_previous_branch_restored "
+                    + "rejectedHead={} ancestor={} restoredBlocks={}",
+                newHead.getBlockId(), parentHash, second.size());
+          }
           throw switchException;
         }
       }
       // only reached when the whole new branch applied cleanly; a failed switch rethrows above
       khaosDb.setHead(binaryTree.getKey().peekFirst());
+      if (DiagnosticLog.shouldLog("pr7047_fork_branch_committed")) {
+        logger.info("@@@ pr=7047 event=fork_branch_committed head={} blocks={}",
+            binaryTree.getKey().peekFirst().getId(), first.size());
+      }
       reApplyBlockEvents(first);
     }
 
@@ -1211,9 +1238,15 @@ public class Manager {
       String address = Hex.toHexString(capsule.getOwnerAddress());
       String txId = Hex.toHexString(capsule.getTransactionId().getBytes());
       TransactionCapsule pendingTx = txMap.get(txId);
-      if (multiAddresses.contains(address) || pendingTx == null || !pendingTx.isVerified()
+      boolean permissionChanged = multiAddresses.contains(address);
+      if (permissionChanged || pendingTx == null || !pendingTx.isVerified()
           || !isSameSig(capsule, pendingTx)) {
         txs.add(capsule);
+        if (permissionChanged
+            && DiagnosticLog.shouldLog("pr6796_permission_owner_selected_for_verification")) {
+          logger.info("@@@ pr=6796 event=permission_owner_selected_for_verification "
+              + "block={} tx={} owner={}", block.getBlockId(), txId, address);
+        }
       } else {
         capsule.setVerified(true);
       }
@@ -2119,6 +2152,10 @@ public class Manager {
     synchronized (this) {
       if (ownerAddressSet.contains(ownerAddress)) {
         tx.setVerified(false);
+        if (DiagnosticLog.shouldLog("pr6716_repush_permission_owner_cache_cleared")) {
+          logger.info("@@@ pr=6716 event=repush_permission_owner_cache_cleared tx={} owner={}",
+              tx.getTransactionId(), ownerAddress);
+        }
       }
     }
 
@@ -2352,8 +2389,19 @@ public class Manager {
       BlockLogTriggerCapsule blockLogTriggerCapsule = new BlockLogTriggerCapsule(blockCapsule);
       blockLogTriggerCapsule.setLatestSolidifiedBlockNumber(solidityBlkNum);
       blockLogTriggerCapsule.setRemoved(removed);
+      boolean actualRemoved = blockLogTriggerCapsule.getBlockLogTrigger().isRemoved();
+      if (actualRemoved != removed
+          && DiagnosticLog.shouldLog("pr6833_legacy_block_removed_flag_mismatch")) {
+        logger.error("### pr=6833 event=legacy_block_removed_flag_mismatch "
+                + "block={} expected={} actual={}",
+            blockCapsule.getBlockId(), removed, actualRemoved);
+      }
       if (!triggerCapsuleQueue.offer(blockLogTriggerCapsule)) {
         logger.info("Too many triggers, block trigger lost: {}.", blockCapsule.getBlockId());
+      } else if (actualRemoved == removed && DiagnosticLog.shouldLog(removed
+          ? "pr6833_legacy_removed_block_enqueued" : "pr6833_legacy_forward_block_enqueued")) {
+        logger.info("@@@ pr=6833 event=legacy_block_trigger_enqueued block={} removed={}",
+            blockCapsule.getBlockId(), removed);
       }
     }
 
@@ -2392,8 +2440,20 @@ public class Manager {
     trx.setLatestSolidifiedBlockNumber(getDynamicPropertiesStore()
         .getLatestSolidifiedBlockNum());
     trx.setRemoved(removed);
+    boolean actualRemoved = trx.getTransactionLogTrigger().isRemoved();
+    if (actualRemoved != removed
+        && DiagnosticLog.shouldLog("pr6833_legacy_transaction_removed_flag_mismatch")) {
+      logger.error("### pr=6833 event=legacy_transaction_removed_flag_mismatch "
+              + "block={} tx={} expected={} actual={}",
+          blockCap.getBlockId(), trxCap.getTransactionId(), removed, actualRemoved);
+    }
     if (!triggerCapsuleQueue.offer(trx)) {
       logger.info("Too many triggers, transaction trigger lost: {}.", trxCap.getTransactionId());
+    } else if (actualRemoved == removed && DiagnosticLog.shouldLog(removed
+        ? "pr6833_legacy_removed_transaction_enqueued"
+        : "pr6833_legacy_forward_transaction_enqueued")) {
+      logger.info("@@@ pr=6833 event=legacy_transaction_trigger_enqueued "
+          + "block={} tx={} removed={}", blockCap.getBlockId(), trxCap.getTransactionId(), removed);
     }
 
     return trx.getTransactionLogTrigger().getEnergyUsageTotal();
@@ -2406,8 +2466,20 @@ public class Manager {
     trx.setLatestSolidifiedBlockNumber(getDynamicPropertiesStore()
         .getLatestSolidifiedBlockNum());
     trx.setRemoved(removed);
+    boolean actualRemoved = trx.getTransactionLogTrigger().isRemoved();
+    if (actualRemoved != removed
+        && DiagnosticLog.shouldLog("pr6833_legacy_transaction_removed_flag_mismatch")) {
+      logger.error("### pr=6833 event=legacy_transaction_removed_flag_mismatch "
+              + "block={} tx={} expected={} actual={}",
+          blockCap.getBlockId(), trxCap.getTransactionId(), removed, actualRemoved);
+    }
     if (!triggerCapsuleQueue.offer(trx)) {
       logger.info("Too many triggers, transaction trigger lost: {}.", trxCap.getTransactionId());
+    } else if (actualRemoved == removed && DiagnosticLog.shouldLog(removed
+        ? "pr6833_legacy_removed_transaction_enqueued"
+        : "pr6833_legacy_forward_transaction_enqueued")) {
+      logger.info("@@@ pr=6833 event=legacy_transaction_trigger_enqueued "
+          + "block={} tx={} removed={}", blockCap.getBlockId(), trxCap.getTransactionId(), removed);
     }
   }
 
@@ -2454,8 +2526,15 @@ public class Manager {
     if (eventPluginLoaded
         && (EventPluginLoader.getInstance().isSolidityEventTriggerEnable()
         || EventPluginLoader.getInstance().isSolidityLogTriggerEnable())) {
-      Args.getSolidityContractLogTriggerMap().remove(blockNum);
-      Args.getSolidityContractEventTriggerMap().remove(blockNum);
+      boolean removedLogBucket = Args.getSolidityContractLogTriggerMap().remove(blockNum) != null;
+      boolean removedEventBucket =
+          Args.getSolidityContractEventTriggerMap().remove(blockNum) != null;
+      if ((removedLogBucket || removedEventBucket)
+          && DiagnosticLog.shouldLog("pr6718_rollback_solidity_cache_cleared")) {
+        logger.info("@@@ pr=6718 event=rollback_solidity_cache_cleared "
+                + "block={} logBucketRemoved={} eventBucketRemoved={}",
+            blockNum, removedLogBucket, removedEventBucket);
+      }
     }
   }
 
@@ -2482,6 +2561,12 @@ public class Manager {
         // without blocking on actual I/O.
         try {
           contractTriggerCapsule.processTrigger();
+          if (DiagnosticLog.shouldLog(remove
+              ? "pr6718_removed_contract_dispatch_returned"
+              : "pr6718_forward_contract_dispatch_returned")) {
+            logger.info("@@@ pr=6718 event=contract_dispatch_returned block={} removed={}",
+                blockHash, remove);
+          }
         } catch (Throwable throwable) {
           logger.warn("Post contract trigger failed.", throwable);
         }

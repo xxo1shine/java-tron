@@ -4,6 +4,8 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.core.net.message.MessageTypes;
 import org.tron.core.net.message.TronMessage;
@@ -13,6 +15,7 @@ import org.tron.protos.Protocol.Inventory;
 import org.tron.protos.Protocol.Inventory.InventoryType;
 
 
+@Slf4j(topic = "net")
 public class InventoryMessage extends TronMessage {
 
   protected Inventory inv;
@@ -21,6 +24,18 @@ public class InventoryMessage extends TronMessage {
     super(data);
     this.type = MessageTypes.INVENTORY.asByte();
     this.inv = ProtoUtil.parseFrom(Protocol.Inventory.parser(), data);
+    int unknownFields = inv.getUnknownFields().asMap().size();
+    if (unknownFields != 0) {
+      if (DiagnosticLog.shouldLog("pr7048.inventory_unknown_fields_retained")) {
+        logger.error("### pr=7048 event=unknown_fields_retained type=inventory count={}",
+            unknownFields);
+      }
+    } else if (DiagnosticLog.shouldLog("pr7048.inventory_proto_compacted")
+        && data.length > inv.getSerializedSize()) {
+      logger.info("@@@ pr=7048 event=transient_proto_compacted type=inventory "
+          + "wireBytes={} protoBytes={} unknownFields=0", data.length,
+          inv.getSerializedSize());
+    }
   }
 
   public InventoryMessage(Inventory inv) {

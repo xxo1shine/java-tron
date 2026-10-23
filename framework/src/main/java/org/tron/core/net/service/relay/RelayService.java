@@ -20,6 +20,7 @@ import org.tron.common.backup.BackupManager.BackupStatusEnum;
 import org.tron.common.crypto.SignInterface;
 import org.tron.common.crypto.SignUtils;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.log.layout.DesensitizedConverter;
 import org.tron.common.parameter.CommonParameter;
 import org.tron.common.utils.ByteArray;
@@ -164,6 +165,12 @@ public class RelayService {
     long timestamp = msg.getTimestamp();
     if (timestamp < now - HELLO_MESSAGE_TIMESTAMP_THRESHOLD
         || timestamp > now + HELLO_MESSAGE_TIMESTAMP_THRESHOLD) {
+      if (DiagnosticLog.shouldLog("pr6972.hello_timestamp_window_rejected")) {
+        logger.info("@@@ pr=6972 event=hello_timestamp_window_rejected"
+            + " timestamp={} now={}",
+            timestamp,
+            now);
+      }
       logger.warn("HelloMessage from {}, timestamp {} is outside the window around {}",
           channel.getInetAddress(), timestamp, now);
       return false;
@@ -171,6 +178,12 @@ public class RelayService {
 
     Long lastTimestamp = helloReplayCache.getIfPresent(msg.getAddress());
     if (lastTimestamp != null && msg.getTimestamp() <= lastTimestamp) {
+      if (DiagnosticLog.shouldLog("pr6972.hello_replay_rejected")) {
+        logger.info("@@@ pr=6972 event=hello_replay_rejected"
+            + " timestamp={} previous={}",
+            timestamp,
+            lastTimestamp);
+      }
       logger.warn("HelloMessage from {}, timestamp {} is not greater than last {}",
           channel.getInetAddress(), msg.getTimestamp(), lastTimestamp);
       return false;
@@ -191,6 +204,12 @@ public class RelayService {
       }
       if (flag) {
         helloReplayCache.put(msg.getAddress(), msg.getTimestamp());
+        if (DiagnosticLog.shouldLog("pr6972.authenticated_hello_recorded")) {
+          logger.info("@@@ pr=6972 event=authenticated_hello_recorded"
+              + " timestamp={} previous={}",
+              timestamp,
+              lastTimestamp);
+        }
         TronNetService.getP2pConfig().getTrustNodes().add(channel.getInetAddress());
         DesensitizedConverter.addSensitive(channel.getInetAddress().toString().substring(1),
             ByteArray.toHexString(msg.getAddress().toByteArray()));

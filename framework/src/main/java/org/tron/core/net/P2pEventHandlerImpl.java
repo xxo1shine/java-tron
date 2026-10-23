@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.Metrics;
 import org.tron.consensus.pbft.message.PbftMessage;
@@ -157,6 +158,13 @@ public class P2pEventHandlerImpl extends P2pEventHandler {
     try {
       msg = TronMessageFactory.create(data);
       type = msg.getType();
+      if (type == MessageTypes.P2P_HELLO) {
+        if (DiagnosticLog.shouldLog("pr6983.hello_constructed_before_dispatch")) {
+          logger.info("@@@ pr=6983 event=hello_constructed_before_dispatch"
+              + " peer={}",
+              peer.getInetSocketAddress());
+        }
+      }
 
       if (INVENTORY.equals(type) && !checkInvRateLimit(peer, (InventoryMessage) msg)) {
         return;
@@ -231,6 +239,13 @@ public class P2pEventHandlerImpl extends P2pEventHandler {
     if (invType == InventoryType.TRX) {
       int count = stats.tronInTrxInventoryElement.getCount(10);
       if (count + currentSize > maxCountIn10s) {
+        if (DiagnosticLog.shouldLog("pr6731.trx_inventory_rate_limited")) {
+          logger.info("@@@ pr=6731 event=trx_inventory_rate_limited"
+              + " window={} current={} max={}",
+              count,
+              currentSize,
+              maxCountIn10s);
+        }
         logger.warn("Drop TRX inv from {}, window:{}, cur:{}, max:{}",
             peer.getInetAddress(), count, currentSize, maxCountIn10s);
         return false;
@@ -238,11 +253,23 @@ public class P2pEventHandlerImpl extends P2pEventHandler {
     } else if (invType == InventoryType.BLOCK) {
       int count = stats.tronInBlockInventoryElement.getCount(10);
       if (count + currentSize > maxBlockInvIn10s) {
+        if (DiagnosticLog.shouldLog("pr6731.block_inventory_rate_limited")) {
+          logger.info("@@@ pr=6731 event=block_inventory_rate_limited"
+              + " window={} current={} max={}",
+              count,
+              currentSize,
+              maxBlockInvIn10s);
+        }
         logger.warn("Drop BLOCK inv from {}, window:{}, cur:{}, max:{}",
             peer.getInetAddress(), count, currentSize, maxBlockInvIn10s);
         return false;
       }
     } else {
+      if (DiagnosticLog.shouldLog("pr6851.unknown_inventory_type_rejected")) {
+        logger.info("@@@ pr=6851 event=unknown_inventory_type_rejected"
+            + " type={}",
+            msg.getInventory().getTypeValue());
+      }
       throw new P2pException(P2pException.TypeEnum.BAD_MESSAGE,
           "unknown inventory type: " + msg.getInventory().getTypeValue());
     }
@@ -304,6 +331,13 @@ public class P2pEventHandlerImpl extends P2pEventHandler {
           code = Protocol.ReasonCode.UNKNOWN;
           break;
       }
+      if (type == P2pException.TypeEnum.BAD_MESSAGE) {
+        if (DiagnosticLog.shouldLog("pr6983.bad_message_classified")) {
+          logger.info("@@@ pr=6983 event=bad_message_classified"
+              + " code={}",
+              code);
+        }
+      }
       logger.warn("Message from {} process failed, {} \n type: ({}), detail: {}",
           peer.getInetSocketAddress(), msg, type, ex.getMessage());
     } else {
@@ -313,6 +347,18 @@ public class P2pEventHandlerImpl extends P2pEventHandler {
     }
 
     peer.disconnect(code);
+    if (ex instanceof P2pException) {
+      P2pException.TypeEnum type = ((P2pException) ex).getType();
+      if (type == P2pException.TypeEnum.BLOCK_SIGN_INVALID
+          || type == P2pException.TypeEnum.BLOCK_MERKLE_INVALID) {
+        if (DiagnosticLog.shouldLog("pr6791.invalid_block_disconnect_requested")) {
+          logger.info("@@@ pr=6791 event=invalid_block_disconnect_requested"
+              + " type={} code={}",
+              type,
+              code);
+        }
+      }
+    }
   }
 
   private String getTimeTag(long duration) {

@@ -126,8 +126,10 @@ public class RealtimeEventServiceTest {
     realtimeEventService.flush(be2, false);
     InOrder delivery = Mockito.inOrder(txCap);
     delivery.verify(txCap).setRemoved(true);
+    delivery.verify(txCap).getTransactionLogTrigger();
     delivery.verify(txCap).processTrigger();
     delivery.verify(txCap).setRemoved(false);
+    delivery.verify(txCap).getTransactionLogTrigger();
     delivery.verify(txCap).processTrigger();
     delivery.verifyNoMoreInteractions();
 

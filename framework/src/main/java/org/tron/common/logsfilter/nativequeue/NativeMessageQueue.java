@@ -2,6 +2,7 @@ package org.tron.common.logsfilter.nativequeue;
 
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -44,7 +45,24 @@ public class NativeMessageQueue {
     }
 
     String bindAddress = String.format("tcp://*:%d", bindPort);
-    return publisher.bind(bindAddress);
+    boolean bound = publisher.bind(bindAddress);
+    if (bound) {
+      try {
+        int effectiveQueueLength = publisher.getSndHWM();
+        if (effectiveQueueLength != sendQueueLength) {
+          if (DiagnosticLog.shouldLog("publisher_hwm_mismatch")) {
+            logger.error("### pr=6965 event=publisher_hwm_mismatch expected={} actual={} port={}",
+                sendQueueLength, effectiveQueueLength, bindPort);
+          }
+        } else if (DiagnosticLog.shouldLog("publisher_hwm_applied")) {
+          logger.info("@@@ pr=6965 event=publisher_hwm_applied queueLimit={} port={}",
+              effectiveQueueLength, bindPort);
+        }
+      } catch (RuntimeException e) {
+        logger.debug("Unable to inspect publisher queue limit", e);
+      }
+    }
+    return bound;
   }
 
   public void stop() {

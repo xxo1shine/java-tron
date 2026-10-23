@@ -6,6 +6,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.util.concurrent.RateLimiter;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.core.config.args.Args;
 
 @Slf4j
@@ -45,9 +46,15 @@ public class GlobalRateLimiter {
   }
 
   public static boolean acquirePermit(RuntimeData runtimeData) {
-    return Args.getInstance().isRateLimiterApiNonBlocking()
-        ? tryAcquire(runtimeData)
-        : acquire(runtimeData);
+    boolean nonBlocking = Args.getInstance().isRateLimiterApiNonBlocking();
+    boolean acquired = nonBlocking ? tryAcquire(runtimeData) : acquire(runtimeData);
+    String event = nonBlocking
+        ? (acquired ? "global_nonblocking_permit_granted" : "global_nonblocking_permit_denied")
+        : (acquired ? "global_blocking_permit_granted" : "global_blocking_permit_denied");
+    if (DiagnosticLog.shouldLog(event)) {
+      logger.info("@@@ pr=6761,6733 event={}", event);
+    }
+    return acquired;
   }
 
   private static RateLimiter loadIpLimiter(String ip) {

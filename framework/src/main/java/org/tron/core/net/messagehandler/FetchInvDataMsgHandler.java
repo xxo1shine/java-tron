@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.overlay.message.Message;
 import org.tron.common.utils.Sha256Hash;
 import org.tron.consensus.ConsensusDelegate;
@@ -156,12 +157,22 @@ public class FetchInvDataMsgHandler implements TronMsgHandler {
                      boolean isAdv) throws P2pException {
     List<Sha256Hash> hashList = fetchInvDataMsg.getHashList();
     if (hashList.size() != new HashSet<>(hashList).size()) {
+      if (DiagnosticLog.shouldLog("pr6712.duplicate_fetch_rejected")) {
+        logger.info("@@@ pr=6712 event=duplicate_fetch_rejected"
+            + " count={}",
+            hashList.size());
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "FetchInvData contains duplicate hashes, size: " + hashList.size());
     }
 
     InventoryType invType = fetchInvDataMsg.getInventoryType();
     if (invType != InventoryType.TRX && invType != InventoryType.BLOCK) {
+      if (DiagnosticLog.shouldLog("pr6851.fetch_unknown_inventory_type_rejected")) {
+        logger.info("@@@ pr=6851 event=fetch_unknown_inventory_type_rejected"
+            + " type={}",
+            fetchInvDataMsg.getInventory().getTypeValue());
+      }
       throw new P2pException(TypeEnum.BAD_MESSAGE,
           "unknown inventory type: " + fetchInvDataMsg.getInventory().getTypeValue());
     }
@@ -207,10 +218,20 @@ public class FetchInvDataMsgHandler implements TronMsgHandler {
                   "maxBlockNum: " + peer.getLastSyncBlockId().getNum() + ", blockNum: " + blockNum);
         }
         if (peer.getSyncBlockIdCache().getIfPresent(hash) != null) {
+          if (DiagnosticLog.shouldLog("pr6966.repeated_sync_block_request_rejected")) {
+            logger.info("@@@ pr=6966 event=repeated_sync_block_request_rejected"
+                + " block={}",
+                hash);
+          }
           throw new P2pException(TypeEnum.BAD_MESSAGE,
                   new BlockId(hash).getString() + " is exist");
         }
         peer.getSyncBlockIdCache().put(hash, System.currentTimeMillis());
+        if (DiagnosticLog.shouldLog("pr6966.sync_request_id_recorded")) {
+          logger.info("@@@ pr=6966 event=sync_request_id_recorded"
+              + " block={}",
+              hash);
+        }
       }
     }
   }

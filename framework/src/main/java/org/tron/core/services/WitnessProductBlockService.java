@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.ByteArray;
 import org.tron.core.capsule.BlockCapsule;
 
@@ -35,6 +36,11 @@ public class WitnessProductBlockService {
         }
         cheatWitnessInfoMap.get(key).clear().setTime(System.currentTimeMillis())
             .setLatestBlockNum(block.getNum()).add(block).add(blockCapsule).increment();
+        if (DiagnosticLog.shouldLog("pr6970.duplicate_witness_recorded")) {
+          logger.info("@@@ pr=6970 event=duplicate_witness_recorded"
+              + " block={}",
+              block.getNum());
+        }
       } else {
         historyBlockCapsuleCache.put(block.getNum(), new BlockCapsule(block.getInstance()));
       }

@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.parameter.CommonParameter;
 import org.tron.common.prometheus.MetricKeys;
 import org.tron.common.prometheus.Metrics;
@@ -73,6 +74,12 @@ public class FetchBlockService {
         .findFirst().ifPresent(sha256Hash -> {
           long now = System.currentTimeMillis();
           fetchBlockInfo = new FetchBlockInfo(sha256Hash, peer, now);
+          if (DiagnosticLog.shouldLog("pr6970.fetch_fallback_armed")) {
+            logger.info("@@@ pr=6970 event=fetch_fallback_armed"
+                + " block={} time={}",
+                sha256Hash,
+                now);
+          }
           Metrics.counterInc(MetricKeys.Counter.BLOCK_FETCH_ARMED, 1);
           logger.info("Set fetchBlockInfo, block: {}, peer: {}, time: {}", sha256Hash,
               peer.getInetAddress(), now);
@@ -87,6 +94,11 @@ public class FetchBlockService {
       return;
     }
     this.fetchBlockInfo = null;
+    if (DiagnosticLog.shouldLog("pr6970.fetch_fallback_cleared")) {
+      logger.info("@@@ pr=6970 event=fetch_fallback_cleared"
+          + " block={}",
+          sha256Hash);
+    }
   }
 
   private void fetchBlockProcess(FetchBlockInfo fetchBlock) {

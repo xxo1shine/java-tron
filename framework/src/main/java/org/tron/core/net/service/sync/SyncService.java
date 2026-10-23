@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.log.DiagnosticLog;
 import org.tron.common.utils.Pair;
 import org.tron.core.capsule.BlockCapsule;
 import org.tron.core.capsule.BlockCapsule.BlockId;
@@ -143,6 +144,11 @@ public class SyncService {
       UnparsedBlock unparsedBlock = new UnparsedBlock(
           blockMessage.getBlockId(), blockMessage.getData());
       blockJustReceived.put(unparsedBlock, peer);
+      if (DiagnosticLog.shouldLog("pr6717.sync_block_bytes_queued")) {
+        logger.info("@@@ pr=6717 event=sync_block_bytes_queued"
+            + " block={}",
+            unparsedBlock.getBlockId());
+      }
     }
     handleFlag = true;
     if (peer.isSyncIdle()) {
@@ -166,6 +172,11 @@ public class SyncService {
     if (peerConnection.equals(p)) {
       requestBlockIds.invalidate(blockId);
       fetchFlag = true;
+      if (DiagnosticLog.shouldLog("pr7050.sync_request_released")) {
+        logger.info("@@@ pr=7050 event=sync_request_released"
+            + " block={}",
+            blockId);
+      }
     }
   }
 
@@ -256,6 +267,13 @@ public class SyncService {
             if (requestBlockIds.getIfPresent(blockId) == null
                 && !peer.getSyncBlockInProcess().contains(blockId)) {
               if (fetchingBlockSize[0] >= remainNum && blockId.getNum() > maxRequestedBlockNum) {
+                if (DiagnosticLog.shouldLog("pr6717.sync_fetch_throttled")) {
+                  logger.info("@@@ pr=6717 event=sync_fetch_throttled"
+                      + " selected={} remaining={} maxPending={}",
+                      fetchingBlockSize[0],
+                      remainNum,
+                      maxPendingBlockSize);
+                }
                 break;
               }
               if (blockId.getNum() > maxRequestedBlockNum) {
@@ -265,6 +283,15 @@ public class SyncService {
               peer.getSyncBlockRequested().put(blockId, System.currentTimeMillis());
               send.get(peer).add(blockId);
               fetchingBlockSize[0]++;
+              if (fetchingBlockSize[0] > remainNum) {
+                if (DiagnosticLog.shouldLog("pr6717.sync_retry_bypassed_throttle")) {
+                  logger.info("@@@ pr=6717 event=sync_retry_bypassed_throttle"
+                      + " block={} selected={} remaining={}",
+                      blockId,
+                      fetchingBlockSize[0],
+                      remainNum);
+                }
+              }
               if (send.get(peer).size() >= MAX_BLOCK_FETCH_PER_PEER) {
                 break;
               }
@@ -306,7 +333,13 @@ public class SyncService {
           if (blockId.getNum() <= solidNum) {
             blockWaitToProcess.remove(unparsedBlock);
             capacityReleased[0] = true;
-            peerConnection.getSyncBlockInProcess().remove(blockId);
+            if (peerConnection.getSyncBlockInProcess().remove(blockId)) {
+              if (DiagnosticLog.shouldLog("pr6970.sync_processing_marker_removed")) {
+                logger.info("@@@ pr=6970 event=sync_processing_marker_removed"
+                    + " block={}",
+                    blockId);
+              }
+            }
             return;
           }
           final boolean[] isFound = {false};
@@ -322,12 +355,23 @@ public class SyncService {
             BlockCapsule block;
             try {
               block = new BlockCapsule(unparsedBlock.getData());
+              if (DiagnosticLog.shouldLog("pr6717.sync_block_parsed_on_demand")) {
+                logger.info("@@@ pr=6717 event=sync_block_parsed_on_demand"
+                    + " block={}",
+                    blockId);
+              }
             } catch (Exception e) {
               logger.warn("Deserialize block {} failed", blockId.getString(), e);
               return;
             }
             processSyncBlock(block, peerConnection);
-            peerConnection.getSyncBlockInProcess().remove(blockId);
+            if (peerConnection.getSyncBlockInProcess().remove(blockId)) {
+              if (DiagnosticLog.shouldLog("pr6970.sync_processing_marker_removed")) {
+                logger.info("@@@ pr=6970 event=sync_processing_marker_removed"
+                    + " block={}",
+                    blockId);
+              }
+            }
           }
         }
       });
@@ -335,6 +379,10 @@ public class SyncService {
     if (capacityReleased[0]) {
       // A full window may have consumed the last fetch trigger before processing freed capacity.
       fetchFlag = true;
+      if (DiagnosticLog.shouldLog("pr7029.sync_fetch_wakeup")) {
+        logger.info("@@@ pr=7029 event=sync_fetch_wakeup"
+            + " reason=pending_capacity_released");
+      }
     }
   }
 
@@ -344,6 +392,11 @@ public class SyncService {
       tronNetDelegate.validBlock(block);
       tronNetDelegate.processBlock(block, true);
       peerConnection.setBlockRcvTime(System.currentTimeMillis());
+      if (DiagnosticLog.shouldLog("pr6704.sync_block_receive_time_updated")) {
+        logger.info("@@@ pr=6704 event=sync_block_receive_time_updated"
+            + " block={}",
+            blockId);
+      }
       pbftDataSyncHandler.processPBFTCommitData(block);
     } catch (Exception e) {
       if (e instanceof P2pException) {
@@ -356,6 +409,13 @@ public class SyncService {
       }
       invalid(blockId, peerConnection);
       peerConnection.disconnect(ReasonCode.BAD_BLOCK);
+      if (DiagnosticLog.shouldLog("pr7050.sync_failure_sender_disconnect_requested")) {
+        logger.info("@@@ pr=7050 event=sync_failure_sender_disconnect_requested"
+            + " block={} peer={} error={}",
+            blockId,
+            peerConnection.getInetSocketAddress(),
+            e.getClass().getSimpleName());
+      }
       return;
     }
 
